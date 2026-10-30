@@ -46,10 +46,12 @@ is the individual plans', the self-served ones: one person's
 (`personal_use`), shown to that person (`display`), derived data for their
 own use only (`internal_only`), never redistributed (`not_allowed`); the
 daily and chain datasets kept, the live ones served and not kept, the trades
-kept two days (a reader that lost some catches up from the lake). Who may
-take it (`eligibility`): personal and commercial uses, each under its own
-plan. Massive's name is not affiliated (`not_affiliated_notice`). A summary,
-not legal advice; docs/terms.md says the same.
+kept two days (a reader that lost some catches up from the lake). Massive's
+name is not affiliated (`not_affiliated_notice`). Who may take it
+(`eligibility`, personal and commercial uses, each under its own plan) is
+not declared yet: core's declaration parser does not carry it, so a
+registration declaring it is refused as differing from its upload. A
+summary, not legal advice; docs/terms.md says the same.
 
 **Storage**: one kind of raw record, Massive's answers and stream frames as
 received (never the key), a month by default.
@@ -57,7 +59,7 @@ received (never the key), a month by default.
 
 from __future__ import annotations
 
-from meridian import DataEligibility, DatasetDeclaration, DatasetLicence, RecordKind
+from meridian import DatasetDeclaration, DatasetLicence, RecordKind
 
 from .chains import CADENCE_SECONDS as CHAIN_CADENCE_SECONDS
 from .chains import DATA_TYPES as CHAIN_DATA_TYPES
@@ -107,7 +109,6 @@ def licence(kept: bool, retention_days: int = 0) -> DatasetLicence:
         personal_use=True,
         redistribution="not_allowed",
         not_affiliated_notice=NOT_AFFILIATED,
-        eligibility=DataEligibility(uses=("personal", "commercial")),
     )
 
 

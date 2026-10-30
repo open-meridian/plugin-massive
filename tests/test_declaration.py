@@ -88,8 +88,8 @@ def test_each_datasets_default_terms_are_an_individual_plans() -> None:
         assert licence.derived_use_terms == "internal_only"
         assert licence.redistribution == "not_allowed"
         assert "not affiliated" in licence.not_affiliated_notice
-        assert licence.eligibility is not None
-        assert licence.eligibility.uses == ("personal", "commercial")
+        # Not declared until core's declaration parser carries it.
+        assert licence.eligibility is None
     kept = {d.key: (d.licence_default.kept, d.licence_default.retention_days) for d in CATALOGUE}  # type: ignore[union-attr]
     assert kept["daily"] == (True, 0) and kept["live"] == (False, 0)
     assert kept["trades"] == (True, 2) and kept["options"] == (True, 0)
