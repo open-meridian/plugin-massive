@@ -329,8 +329,12 @@ def main():
     try:
         run()
     except (Failed, subprocess.TimeoutExpired, KeyError, ValueError, IndexError, TypeError) as failed:
+        logs = compose("logs", "--no-color", check=False).stdout
         with open(COMPONENTS, "a", encoding="utf-8") as kept:
-            kept.write(compose("logs", "--no-color", check=False).stdout)
+            kept.write(logs)
+        # The plugin's and its sidecar's last words, where CI's log shows them.
+        said = [line for line in logs.splitlines() if line.startswith((f"{INSTANCE}-", f"{INSTANCE} ", f"sidecar-{INSTANCE}"))]
+        print("\n".join(said[-60:]), file=sys.stderr)
         compose("--profile", "runner", "down", "-v", "--remove-orphans", check=False)
         print(f"{NAME} FAILED: {failed}; the runner's log is in {LOG}, the components' in {COMPONENTS}",
               file=sys.stderr)

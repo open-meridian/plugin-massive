@@ -12,10 +12,11 @@ reading roles' to read, under their entitlement.
   each asset class's plan as the settings say it), "Limits and use" (the
   pace kept by plan, the calls, the last error), "Stream" (each cluster's
   session) and "Sessions" once measured.
-- **Datasets** (`/datasets`): "Served" -- the seven datasets as the
-  catalogue declares them, the one of each kind the plans serve marked so,
-  licensed or not, the source behind each; "Wants", the latest few drawn
-  (the tool answers every one); "Subjects".
+- **Datasets** (`/datasets`): "Served" -- the datasets as the catalogue
+  declares them, licensed or not, the source behind each: a browser is drawn
+  those the plans serve now, one of each kind's two timelinesses, the tool
+  answering all seven; "Wants", the latest few drawn (the tool answers every
+  one); "Subjects".
 
 Each page fits one screen at 375, 582 and 1280 pixels wide: one-line rows,
 the details a click away.
@@ -457,8 +458,14 @@ async def connection(request: meridian.Request) -> meridian.Response:
 )
 async def datasets(request: meridian.Request) -> meridian.Response:
     read = datasets_read(_state)
-    drawn = read if request.tool_name else replace(read, wants=read.wants[:SHOWN_WANTS])
-    return pages.answer("datasets.html", drawn, wants=len(read.wants))
+    if request.tool_name:
+        return pages.answer("datasets.html", read, wants=len(read.wants), served=len(read.served))
+    # A browser draws the datasets the plans serve now -- one of each kind's
+    # two timelinesses -- and the latest few wants, so the page fits one
+    # screen at 375 pixels; the tool answers every one.
+    shown = [s for s in read.served if not s.entitled_at_vendor.startswith("No:")]
+    drawn = replace(read, served=shown, wants=read.wants[:SHOWN_WANTS])
+    return pages.answer("datasets.html", drawn, wants=len(read.wants), served=len(read.served))
 
 
 def serve(plugin: meridian.Plugin, state: State, port: int) -> Any:
