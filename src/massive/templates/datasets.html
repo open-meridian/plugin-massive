@@ -1,0 +1,15 @@
+{#- Datasets, at admin: the data role's (meridian/roles/data/datasets.html),
+    with Massive's nuance at its blocks only -- a line, on a wide screen, on
+    what is kept current and how many datasets and standing wants are past
+    those drawn (the datasets the plans serve, the latest wants), a
+    notice where open interest cannot be dated, and the source behind each
+    dataset as a column of "Served". No prices, trades or quotes: those are
+    the reading roles'. -#}
+{% extends "meridian/roles/data/datasets.html" %}
+{% block vendor_notices %}
+{% if data.calendar_error %}<div class="notice warn" role="status">Open interest is not recorded: {{ data.calendar_error }}</div>{% endif %}
+<p class="muted wide-only">{% if served > data.served|length %}{{ data.served|length }} of {{ served }} datasets shown: those your plans serve. {% endif %}{% if data.listings or data.chains %}Listings: {{ data.listings }} known, {{ data.streamed }} streamed{% if data.forming %}, {{ data.forming }} forming{% endif %}; chains: {{ data.chains }}, {{ data.series_streamed }} series streamed.{% endif %}{% if wants > data.wants|length %} The latest {{ data.wants|length }} of {{ wants }} wants shown.{% endif %}</p>
+{% endblock %}
+{% block vendor_columns %}
+{% if row is none %}<th class="wide-only">Source</th>{% else %}<td class="wide-only">{{ row.source }}</td>{% endif %}
+{% endblock %}

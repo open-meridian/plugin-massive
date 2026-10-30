@@ -1,0 +1,84 @@
+{
+  "_about": "Massive's documented response shapes with every value invented, for sample data, the tests and the e2e. Never a real response. Numbers are text here and go out as JSON numbers exactly as written.",
+  "daily": {
+    "SPY": [
+      {"date": "2026-10-05", "o": "665.10", "h": "668.92", "l": "664.01", "c": "667.55", "v": "61204310", "vw": "666.8104", "n": "712455"},
+      {"date": "2026-10-06", "o": "667.80", "h": "669.40", "l": "665.12", "c": "668.03", "v": "58830122", "vw": "667.2290", "n": "690112"},
+      {"date": "2026-10-07", "o": "668.11", "h": "672.03", "l": "667.95", "c": "670.88", "v": "64400200", "vw": "670.0144", "n": "731080"},
+      {"date": "2026-10-08", "o": "670.50", "h": "673.21", "l": "669.70", "c": "671.42", "v": "59120455", "vw": "671.6012", "n": "702233"},
+      {"date": "2026-10-09", "o": "671.60", "h": "674.48", "l": "670.33", "c": "673.90", "v": "62011870", "vw": "672.5530", "n": "715900"}
+    ],
+    "BRK.B": [
+      {"date": "2026-10-05", "o": "485.20", "h": "487.95", "l": "484.10", "c": "486.40", "v": "3404211", "vw": "486.0021", "n": "61120"},
+      {"date": "2026-10-06", "o": "486.50", "h": "488.30", "l": "485.70", "c": "487.12", "v": "3120983", "vw": "487.0533", "n": "58003"},
+      {"date": "2026-10-07", "o": "487.00", "h": "489.44", "l": "486.21", "c": "488.95", "v": "3398120", "vw": "488.1010", "n": "60450"},
+      {"date": "2026-10-08", "o": "488.90", "h": "490.01", "l": "487.33", "c": "488.17", "v": "3655812", "vw": "488.6604", "n": "63980"},
+      {"date": "2026-10-09", "o": "488.20", "h": "491.05", "l": "487.90", "c": "490.62", "v": "3550402", "vw": "489.7781", "n": "62211"}
+    ],
+    "TQQQ": [
+      {"date": "2026-10-05", "o": "90.10", "h": "91.55", "l": "89.80", "c": "91.02", "v": "41020110", "vw": "90.8812", "n": "301220"},
+      {"date": "2026-10-06", "o": "91.00", "h": "92.10", "l": "90.42", "c": "91.77", "v": "39811020", "vw": "91.4021", "n": "295110"},
+      {"date": "2026-10-07", "o": "91.80", "h": "93.40", "l": "91.55", "c": "93.01", "v": "44120334", "vw": "92.6650", "n": "320998"},
+      {"date": "2026-10-08", "o": "93.00", "h": "93.62", "l": "92.40", "c": "92.85", "v": "40555012", "vw": "93.0102", "n": "308721"},
+      {"date": "2026-10-09", "o": "92.90", "h": "93.95", "l": "92.71", "c": "93.123456789012345678", "v": "42004500", "vw": "93.3301", "n": "311004"}
+    ]
+  },
+  "snapshot": [
+    {"ticker": "SPY", "lastTrade": {"c": [0], "i": "52983525029461", "p": "673.88", "s": 100, "t": 1791576000123456789, "x": 12}, "lastQuote": {"p": "673.87", "s": 300, "P": "673.89", "S": 200, "t": 1791576000120000000}, "updated": 1791576000123456789},
+    {"ticker": "BRK.B", "lastTrade": {"c": [0], "i": "62983525029401", "p": "490.60", "s": 20, "t": 1791576000223456789, "x": 10}, "lastQuote": {"p": "490.58", "s": 100, "t": 1791576000220000000}, "updated": 1791576000223456789},
+    {"ticker": "TQQQ", "lastTrade": {"c": [0], "i": "72983525029411", "p": "93.12", "s": 500, "t": 1791576000323456789, "x": 4}, "lastQuote": {"p": "93.11", "s": 1200, "P": "93.13", "S": 900, "t": 1791576000320000000}, "updated": 1791576000323456789}
+  ],
+  "trades": {
+    "SPY": [
+      {"offset_ms": 0, "sequence_number": 4101, "exchange": 12, "price": "673.80", "size": 100, "conditions": [], "id": "1"},
+      {"offset_ms": 40, "sequence_number": 4102, "exchange": 10, "price": "673.81", "size": 7, "decimal_size": "7.0", "conditions": [37], "id": "2"},
+      {"offset_ms": 80, "sequence_number": 4103, "exchange": 4, "price": "673.82", "size": 300, "conditions": [14], "id": "3"},
+      {"offset_ms": 120, "sequence_number": 4104, "exchange": 12, "price": "673.83", "size": 50, "conditions": [999], "id": "4"}
+    ]
+  },
+  "conditions": {
+    "stocks": [
+      {"id": 0, "name": "Regular Trade", "type": "sale_condition", "asset_class": "stocks", "data_types": ["trade"], "sip_mapping": {"CTA": "@", "UTP": "@"}, "update_rules": {"consolidated": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}, "market_center": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}}},
+      {"id": 12, "name": "Form T", "type": "sale_condition", "asset_class": "stocks", "data_types": ["trade"], "sip_mapping": {"CTA": "T", "UTP": "T"}, "update_rules": {"consolidated": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}, "market_center": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}}},
+      {"id": 14, "name": "Intermarket Sweep", "type": "sale_condition", "asset_class": "stocks", "data_types": ["trade"], "sip_mapping": {"CTA": "F", "UTP": "F"}, "update_rules": {"consolidated": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}, "market_center": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}}},
+      {"id": 37, "name": "Odd Lot Trade", "type": "sale_condition", "asset_class": "stocks", "data_types": ["trade"], "sip_mapping": {"CTA": "I", "UTP": "I"}, "update_rules": {"consolidated": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}, "market_center": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}}}
+    ],
+    "options": [
+      {"id": 209, "name": "Single Leg Auction Non ISO", "type": "sale_condition", "asset_class": "options", "data_types": ["trade"], "sip_mapping": {"OPRA": "a"}, "update_rules": {"consolidated": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}, "market_center": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}}},
+      {"id": 219, "name": "Single Leg Auction ISO", "type": "sale_condition", "asset_class": "options", "data_types": ["trade"], "sip_mapping": {"OPRA": "b"}, "update_rules": {"consolidated": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}, "market_center": {"updates_high_low": true, "updates_open_close": true, "updates_volume": true}}},
+      {"id": 233, "name": "Multi Leg auto-electronic trade", "type": "sale_condition", "asset_class": "options", "data_types": ["trade"], "sip_mapping": {"OPRA": "f"}, "update_rules": {"consolidated": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}, "market_center": {"updates_high_low": false, "updates_open_close": false, "updates_volume": true}}}
+    ]
+  },
+  "exchanges": {
+    "stocks": [
+      {"id": 4, "acronym": "ADF", "asset_class": "stocks", "locale": "us", "mic": "XADF", "name": "Invented Alternative Display Facility", "operating_mic": "FINR", "participant_id": "D", "type": "TRF"},
+      {"id": 10, "acronym": "NYSE", "asset_class": "stocks", "locale": "us", "mic": "XNYS", "name": "Invented New York exchange", "operating_mic": "XNYS", "participant_id": "N", "type": "exchange"},
+      {"id": 12, "acronym": "NASDAQ", "asset_class": "stocks", "locale": "us", "mic": "XNAS", "name": "Invented Nasdaq", "operating_mic": "XNAS", "participant_id": "Q", "type": "exchange"}
+    ]
+  },
+  "options": {
+    "SPY": {
+      "_about": "Expirations are the first and second Fridays after the day asked, so a chain is always current; each contract's values follow from its strike.",
+      "strikes": ["665", "670", "675"],
+      "quote": {"call": {"bid": "8.10", "ask": "8.20", "bid_size": 40, "ask_size": 35}, "put": {"bid": "4.05", "ask": "4.15", "bid_size": 25, "ask_size": 30}},
+      "open_interest": {"call": 1543, "put": 2210},
+      "volume": {"call": 868, "put": 1204},
+      "adjusted": {"root": "SPY1", "strike": "670", "deliverables": [{"amount": 100, "type": "equity", "underlying": "SPY"}, {"amount": "12.50", "type": "currency", "underlying": "USD"}]}
+    }
+  },
+  "stream": {
+    "stocks": [
+      {"ev": "Q", "sym": "SPY", "bx": 12, "bp": "673.87", "bs": 300, "ax": 10, "ap": "673.89", "as": 200, "c": 0, "i": [], "offset_ms": 0, "q": 50385480, "z": 1},
+      {"ev": "T", "sym": "SPY", "x": 12, "i": "12345", "z": 1, "p": "673.88", "s": 100, "c": [], "offset_ms": 5, "q": 4105},
+      {"ev": "T", "sym": "SPY", "x": 10, "i": "12346", "z": 1, "p": "673.89", "s": 7, "ds": "7.0", "c": [37], "offset_ms": 9, "q": 4106},
+      {"ev": "T", "sym": "SPY", "x": 12, "i": "12347", "z": 1, "p": "673.90", "s": 10, "c": [999], "offset_ms": 12, "q": 4107},
+      {"ev": "Q", "sym": "BRK.B", "bx": 10, "bp": "490.58", "bs": 100, "c": 0, "i": [], "offset_ms": 14, "q": 20385480, "z": 1},
+      {"ev": "T", "sym": "BRK.B", "x": 10, "i": "22345", "z": 1, "p": "490.61", "s": 20, "c": [], "offset_ms": 16, "q": 905}
+    ],
+    "options": [
+      {"ev": "T", "x": 65, "p": "8.15", "s": 3, "c": [209], "offset_ms": 0, "q": 651921857},
+      {"ev": "T", "x": 302, "p": "8.16", "s": 12, "c": [219], "offset_ms": 4, "q": 651921858},
+      {"ev": "T", "x": 302, "p": "8.14", "s": 5, "c": [233], "offset_ms": 8, "q": 651921859}
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "massive"
+version = "0.1.0"
+description = "Massive's US stock and option market data in an Open Meridian deployment's lake"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+# The SDK and nothing else of Meridian's, pinned exactly: the sidecar this runs
+# beside speaks one version of the contract, and a range would let a rebuild
+# pick up another. The Dockerfile's base is the same version.
+#
+# No third-party dependency: Massive's REST is the standard library's, its
+# WebSocket the plugin's own (ws.py), and the New York day zoneinfo's.
+dependencies = ["open-meridian==0.33.3"]
+
+[project.urls]
+Repository = "https://github.com/open-meridian/plugin-massive"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.24",
+  "pytest-timeout>=2.3",
+  "mypy>=1.11",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+massive = "massive.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The pages' templates and the synthetic exchange, installed beside the code
+# that reads them.
+[tool.setuptools.package-data]
+massive = ["templates/*.html", "synthetic/*.json"]
+
+# What this plugin says about itself, which `meridian plugin upload` sends and
+# a deployment admin approves before it runs (W8). Declarations, not grants.
+[tool.meridian]
+# Roles from the deployment's fixed list -- compliance, confirmation,
+# connectivity, custody, data, ems, oms, operations, portfolio, reporting,
+# servicing, settlement, signal -- and its grants are theirs. `data`:
+# Massive's stock and option market data into the lake, its codes converted
+# at the edge, its raw answers in its own storage.
+roles = ["data"]
+# Whether it serves a page through its sidecar.
+interface = true
+# Its declaration: its catalogue (the datasets it serves the lake), its
+# settings, one of them secret, the storage it asks for, its pages and its
+# documentation.
+declaration = "massive.declaration:DECLARATION"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["massive"]
+known-local-folder = ["conftest"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+# The SDK's gRPC stubs have no types (meridian-python's own configuration
+# says the same).
+[[tool.mypy.overrides]]
+module = [
+    "meridian.v1.sidecar_pb2_grpc",
+    "meridian.v1.envelope_pb2_grpc",
+    "meridian.plugin.v1.operations_pb2_grpc",
+]
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# No test waits on a stream or a socket for ever: one past this fails.
+timeout = 60
+testpaths = ["tests"]
