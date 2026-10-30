@@ -1,0 +1,9 @@
+meridian-massive
+Copyright 2026 Societal Lab Inc.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Massive is a trademark of its owner. This project is not affiliated with or
+endorsed by Massive.com, Inc.; it reads Massive's REST and WebSocket APIs with
+the key of the account holder's own Massive account, under that account's own
+terms (docs/terms.md).
