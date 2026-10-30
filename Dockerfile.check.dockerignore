@@ -1,0 +1,11 @@
+# Dockerfile.check's own ignore list (BuildKit reads it in place of
+# .dockerignore for that file): the tests are what it runs, so they are in.
+.git
+__pycache__
+*.pyc
+.venv
+.meridian
+recordings
+.test.log
+.e2e
+preview

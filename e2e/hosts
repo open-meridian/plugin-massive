@@ -1,0 +1,8 @@
+# The e2e's hosts file, mounted over the plugin's /etc/hosts (e2e/plugin.yaml):
+# Massive answers nowhere, so the run never reads Massive's live service and no
+# key is ever needed or sent.
+127.0.0.1 localhost
+::1 localhost
+127.0.0.1 api.massive.com
+127.0.0.1 socket.massive.com
+127.0.0.1 delayed.massive.com

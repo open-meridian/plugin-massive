@@ -1,0 +1,14 @@
+# The e2e's additions to the harness's plugins (the harness's README, "The
+# plugins"): the plugin given a hosts file in which Massive answers nowhere,
+# so the run reads only the sample data committed with it and no key is ever
+# needed or sent; and the reader, run from this directory in the plugin's own
+# image. Paths are absolute, from E2E_DIR, since a later compose file's
+# relative paths resolve against the first file's directory.
+services:
+  massive:
+    volumes:
+      - ${E2E_DIR:?set E2E_DIR to this directory, absolute}/hosts:/etc/hosts:ro
+  reader:
+    entrypoint: ["python", "-u", "/e2e/reader.py"]
+    volumes:
+      - ${E2E_DIR}:/e2e:ro
