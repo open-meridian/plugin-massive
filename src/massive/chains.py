@@ -35,7 +35,9 @@ reader asks for one (RequestSeriesRecords, W6.37), never this plugin.
   is empty. Open interest is the count at the end of the last trading day,
   so it is dated the market day before today by the deployment's US equity
   calendar (the datasets' `calendar_id`, ReadCalendar); where the calendar
-  does not answer, no open interest is recorded rather than misdated.
+  does not answer, no open interest is recorded rather than misdated, and
+  the read is tried again after a backoff (30 seconds, doubling to 15
+  minutes), so one failed read does not leave the day undated.
   Volume is dated by the day its bar was last updated, as Massive states it.
   A value Massive leaves out records no row, never a zero (W10.4). Greeks,
   implied volatility and Massive's fair market value are never read: the
@@ -114,6 +116,9 @@ TEMPLATE_VERSION = "1"
 CURRENCY = "USD"
 #: How far back a market day is looked for.
 LOOK_BACK_DAYS = 14
+#: A failed calendar read tried again after this, in seconds, doubling to the most.
+CALENDAR_RETRY_FIRST_SECONDS = 30
+CALENDAR_RETRY_MOST_SECONDS = 900
 #: How many rows' last sendings are remembered, to send only what changed.
 REMEMBERED = 200_000
 #: How many option trades recorded are remembered, so none is sent twice.
@@ -191,6 +196,10 @@ class Chains:
         self.days: dict[dt.date, bool] = {}
         self.calendar_read: tuple[dt.date, dt.date] | None = None
         self.calendar_error = ""
+        #: Failed calendar reads since the last that answered, and when the
+        #: next may be made.
+        self.calendar_failures = 0
+        self.calendar_retry_ns = 0
         #: Chains read since start; when a chain was last read or a series'
         #: message heard, and the liveness last recorded.
         self.read_count = 0
@@ -467,12 +476,15 @@ class Chains:
 
     async def is_open(self, day: dt.date) -> bool | None:
         """Whether a day is a US equity market day by the deployment's
-        calendar (ReadCalendar); None where the calendar did not answer."""
+        calendar (ReadCalendar); None where the calendar did not answer. A
+        failed read is tried again once its backoff has passed."""
         if day in self.days:
             return self.days[day]
         today = new_york_date(self.now())
         span = (today - dt.timedelta(days=LOOK_BACK_DAYS + 7), today + dt.timedelta(days=7))
-        if self.calendar_read == span:
+        if self.calendar_read == span and (
+            not self.calendar_failures or self.now() < self.calendar_retry_ns
+        ):
             return None
         self.calendar_read = span
         try:
@@ -480,13 +492,14 @@ class Chains:
                 calendar_id=self.lake.calendar_id, from_date=span[0], to_date=span[1]
             )
         except (MeridianError, ValueError) as failed:
-            self.calendar_error = f"the calendar was not read: {failed}"[:300]
+            self._calendar_failed(f"the calendar was not read: {failed}"[:300])
             log.warning("%s", self.calendar_error)
             return None
         if not answer.found:
-            self.calendar_error = f"the calendar {self.lake.calendar_id} was not found"
+            self._calendar_failed(f"the calendar {self.lake.calendar_id} was not found")
             return None
         self.calendar_error = ""
+        self.calendar_failures = 0
         weekends = {int(w) for weekend in answer.weekends for w in weekend.weekdays}
         closed = {c.date for c in answer.days if c.kind == ops.CALENDAR_DAY_KIND_CLOSED and c.date}
         opened = {c.date for c in answer.days if c.kind == ops.CALENDAR_DAY_KIND_OPEN and c.date}
@@ -497,6 +510,17 @@ class Chains:
             self.days[day_of] = text in opened or (text not in closed and weekday not in weekends)
             day_of += dt.timedelta(days=1)
         return self.days.get(day)
+
+    def _calendar_failed(self, said: str) -> None:
+        """A calendar read that did not answer: said, and the next allowed
+        after a backoff that doubles to its most."""
+        self.calendar_error = said
+        self.calendar_failures += 1
+        wait = min(
+            CALENDAR_RETRY_FIRST_SECONDS << min(self.calendar_failures - 1, 10),
+            CALENDAR_RETRY_MOST_SECONDS,
+        )
+        self.calendar_retry_ns = self.now() + wait * NS
 
     async def dates(self) -> dict[str, str]:
         """The trading date each statistic read now is for: open interest the

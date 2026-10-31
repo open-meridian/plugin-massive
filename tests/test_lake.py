@@ -11,14 +11,26 @@ import datetime as dt
 from pathlib import Path
 from typing import Any
 
+from meridian.errors import MeridianError
 from meridian.plugin.v1 import operations_pb2 as ops
 from meridian.suites import Recorder
 
 from massive import convert
+from massive.chains import CALENDAR_RETRY_MOST_SECONDS, NS
 from massive.settings import DELAYED, END_OF_DAY, REAL_TIME
 from massive.synthetic import fridays
 
-from conftest import RECORDS, SPY, Clock, answer_calendar, answer_records, at, synthetic_lake, want
+from conftest import (
+    RECORDS,
+    SPY,
+    Clock,
+    answer_calendar,
+    answer_records,
+    at,
+    calendar,
+    synthetic_lake,
+    want,
+)
 
 MONDAY = at("2026-10-12", 11)
 FIRST, SECOND = fridays(dt.date(2026, 10, 12))
@@ -172,6 +184,45 @@ def test_no_calendar_no_open_interest(tmp_path: Path) -> None:
     stats = rows(recorder, "RecordStatistics", "statistics")
     assert stats and all(s.kind == ops.STATISTIC_KIND_VOLUME for s in stats)
     assert "was not found" in held.chains.calendar_error
+
+
+def test_a_failed_calendar_read_is_tried_again_after_a_backoff(tmp_path: Path) -> None:
+    recorder, held = lake(tmp_path, calendar=False)
+    failing = [True]
+
+    def reply(params: Any) -> Any:
+        if failing[0]:
+            raise MeridianError("the sidecar did not answer")
+        return calendar(params)
+
+    recorder.answer("ReadCalendar", reply)
+    chains, clock = held.chains, held.clock_ns
+    friday = dt.date(2026, 10, 9)
+
+    def is_open() -> bool | None:
+        held_open: bool | None = asyncio.run(chains.is_open(friday))
+        return held_open
+
+    assert is_open() is None and "was not read" in chains.calendar_error
+    assert len(recorder.on("ReadCalendar")) == 1
+    clock.now += 10 * NS  # within the first backoff: not read again
+    assert is_open() is None and len(recorder.on("ReadCalendar")) == 1
+    clock.now += 21 * NS  # past it: read again, failing again
+    assert is_open() is None and len(recorder.on("ReadCalendar")) == 2
+    clock.now += 31 * NS  # the backoff doubled to a minute
+    assert is_open() is None and len(recorder.on("ReadCalendar")) == 2
+    failing[0] = False
+    clock.now += 30 * NS
+    assert is_open() is True and len(recorder.on("ReadCalendar")) == 3
+    assert chains.calendar_error == "" and chains.calendar_failures == 0
+
+
+def test_the_calendar_backoff_is_bounded(tmp_path: Path) -> None:
+    _, held = lake(tmp_path)
+    chains = held.chains
+    for _ in range(40):
+        chains._calendar_failed("the calendar was not read")
+    assert chains.calendar_retry_ns - held.clock_ns() == CALENDAR_RETRY_MOST_SECONDS * NS
 
 
 def test_a_delayed_options_plan_records_no_quote(tmp_path: Path) -> None:
