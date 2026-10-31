@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 (2026-10-30)
+
+SDK 0.33.4: raw-record writes and enum conversion fixes (ruling 937).
+
+- **The pins:** open-meridian 0.33.3 to 0.33.4, and plugin-python:0.33.4 by tag
+  and digest (`meridian plugin migrate --to 0.33.4`: only the pins move).
+
 ## 0.1.1 (2026-10-30)
 
 A bug fix (ruling 926), until the SDK's own calendar helper replaces it

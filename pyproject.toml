@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "massive"
-version = "0.1.1"
+version = "0.1.2"
 description = "Massive's US stock and option market data in an Open Meridian deployment's lake"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
@@ -14,7 +14,7 @@ requires-python = ">=3.11"
 #
 # No third-party dependency: Massive's REST is the standard library's, its
 # WebSocket the plugin's own (ws.py), and the New York day zoneinfo's.
-dependencies = ["open-meridian==0.33.3"]
+dependencies = ["open-meridian==0.33.4"]
 
 [project.urls]
 Repository = "https://github.com/open-meridian/plugin-massive"

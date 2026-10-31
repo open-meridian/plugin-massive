@@ -8,7 +8,7 @@
 #
 # BASE is for building against a base made locally rather than a released one.
 # The release by its tag and its digest, the image exactly; move both together.
-ARG BASE=ghcr.io/open-meridian/plugin-python:0.33.3@sha256:24fb61f258efe94997647663b1d7580378b268d47a26851a125e14f1c60cbb7e
+ARG BASE=ghcr.io/open-meridian/plugin-python:0.33.4@sha256:73937d83e947c7a8d2618af7fc846364b96ed85d83314921ae21e51ac4ee95c6
 FROM ${BASE}
 WORKDIR /plugin
 # Installed from a mount rather than copied, so the image holds the installed
