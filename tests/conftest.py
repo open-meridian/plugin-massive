@@ -84,18 +84,19 @@ def answer_records(recorder: Recorder, records: Mapping[str, Sequence[ops.Identi
     recorder.answer("ResolveIdentifier", joined)
 
 
-def answer_calendar(recorder: Recorder, closed: Sequence[str] = ()) -> None:
+def calendar(params: Any, closed: Sequence[str] = ()) -> ops.ReadCalendarResult:
     """The deployment's US equity calendar: weekends closed, and `closed`."""
+    return ops.ReadCalendarResult(
+        found=True,
+        calendar_id=params.calendar_id,
+        weekends=[ops.CalendarWeekend(weekdays=[ops.WEEKDAY_SATURDAY, ops.WEEKDAY_SUNDAY])],
+        days=[ops.CalendarDay(date=day, kind=ops.CALENDAR_DAY_KIND_CLOSED) for day in closed],
+    )
 
-    def reply(params: Any) -> ops.ReadCalendarResult:
-        return ops.ReadCalendarResult(
-            found=True,
-            calendar_id=params.calendar_id,
-            weekends=[ops.CalendarWeekend(weekdays=[ops.WEEKDAY_SATURDAY, ops.WEEKDAY_SUNDAY])],
-            days=[ops.CalendarDay(date=day, kind=ops.CALENDAR_DAY_KIND_CLOSED) for day in closed],
-        )
 
-    recorder.answer("ReadCalendar", reply)
+def answer_calendar(recorder: Recorder, closed: Sequence[str] = ()) -> None:
+    """ReadCalendar answered with the deployment's US equity calendar."""
+    recorder.answer("ReadCalendar", lambda params: calendar(params, closed))
 
 
 def no_wait(massive: Massive) -> Massive:

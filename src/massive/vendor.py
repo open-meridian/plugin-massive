@@ -55,7 +55,7 @@ HOST = "api.massive.com"
 #: Massive's WebSocket clusters, by timeliness: the real-time one and the
 #: one 15 minutes delayed, each with a path per asset class.
 STREAMS = {"real_time": "wss://socket.massive.com", "delayed": "wss://delayed.massive.com"}
-USER_AGENT = "meridian-massive/0.1.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-massive/0.1.1 (+https://open-meridian.dev)"
 NS = 1_000_000_000
 
 #: Massive's free (end-of-day) plans: five calls a minute.

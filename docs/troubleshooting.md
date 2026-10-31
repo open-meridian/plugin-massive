@@ -38,4 +38,5 @@ another program using the same key closes this one's.
 
 The deployment's US equity calendar did not answer, so the previous market
 day is not known. **Datasets** says why. Volume, series and quotes are
-recorded meanwhile.
+recorded meanwhile. The plugin asks the calendar again after 30 seconds,
+then less often, at least every 15 minutes, until it answers.

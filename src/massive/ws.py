@@ -26,7 +26,7 @@ GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #: The longest message read: Massive's frames are far shorter.
 MOST_BYTES = 16 * 1024 * 1024
 TEXT, BINARY, CLOSE, PING, PONG, CONTINUATION = 0x1, 0x2, 0x8, 0x9, 0xA, 0x0
-USER_AGENT = "meridian-massive/0.1.0 (+https://open-meridian.dev)"
+USER_AGENT = "meridian-massive/0.1.1 (+https://open-meridian.dev)"
 
 
 class Closed(Exception):
