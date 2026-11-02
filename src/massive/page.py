@@ -113,6 +113,12 @@ def host(state: State) -> str:
     return urllib.parse.urlparse(state.massive.base).hostname or ""
 
 
+#: The supervisor's states in the page's words (SDK 0.35's
+#: `helpers.sessions.SessionState`): nothing wanted is idle, a session open
+#: is streaming; connecting, waiting, refused and no key as they are.
+SHOWN_STATES = {"off": "idle", "open": "streaming"}
+
+
 def _stream(cluster: str, streamer: Streamer | None, plan: str, sample: bool) -> SessionRead:
     hostname = (
         ""
@@ -123,17 +129,17 @@ def _stream(cluster: str, streamer: Streamer | None, plan: str, sample: bool) ->
     if streamer is None or plan == END_OF_DAY:
         return SessionRead(cluster, hostname, "does not stream on an end-of-day plan"
                            if plan == END_OF_DAY else "idle")  # fmt: skip
-    held = streamer.session
+    held = streamer.state
     return SessionRead(
         cluster=cluster,
         host=hostname,
-        state=held.state,
-        subscribed=held.subscribed,
+        state=SHOWN_STATES.get(held.state, held.state),
+        subscribed=len(held.subscribed),
         opened=held.opened,
         reconnects=held.reconnects,
         messages=held.messages,
         since=_when(held.since_ns),
-        last_message_at=_when(held.last_message_at_ns),
+        last_message_at=_when(held.last_message_ns),
         last_error=held.last_error,
     )
 
@@ -466,9 +472,3 @@ async def datasets(request: meridian.Request) -> meridian.Response:
     shown = [s for s in read.served if not s.entitled_at_vendor.startswith("No:")]
     drawn = replace(read, served=shown, wants=read.wants[:SHOWN_WANTS])
     return pages.answer("datasets.html", drawn, wants=len(read.wants), served=len(read.served))
-
-
-def serve(plugin: meridian.Plugin, state: State, port: int) -> Any:
-    """Serve the pages on loopback beside the sidecar, reading `state`."""
-    use(state)
-    return pages.serve(plugin, port)

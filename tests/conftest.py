@@ -5,7 +5,7 @@ as the instrument store would answer them, and its US equity calendar."""
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +125,7 @@ def synthetic_lake(
         )
     )
     source = MassiveSource(massive, synthetic=True)
-    lake = Lake(recorder, source, Products(tmp / "products.json"), clock)
+    lake: Lake = recorder.bind(Lake(source, Products(tmp / "products.json"), clock))
     lake.use_plan(stocks, options)
     return lake
 
@@ -209,3 +209,10 @@ def restore_parse() -> Any:
 
 
 Parse = Callable[[str], Any]
+
+
+async def hear_row(recorder: Recorder, row: str, handler: Callable[[Any], Awaitable[None]]) -> None:
+    """One row the recorder answers, handed to `handler` alone -- as
+    `Recorder.receive(<row>=handler)` did before open-meridian 0.35, whose
+    `Recorder.hear(role)` hands a role class every row it hears."""
+    await recorder._hear({row: handler})

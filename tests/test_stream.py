@@ -126,7 +126,8 @@ def test_the_streamer_hands_the_synthetic_stream_on(tmp_path: Path) -> None:
     streamer.want(["SPY"])
 
     async def go() -> None:
-        task = asyncio.ensure_future(streamer.run(sessions=1))
+        # The SDK's supervisor (0.35): one session held.
+        task = asyncio.ensure_future(streamer.run(once=True))
         for _ in range(100):
             if len(heard) >= 4:
                 break
@@ -137,7 +138,7 @@ def test_the_streamer_hands_the_synthetic_stream_on(tmp_path: Path) -> None:
     asyncio.run(go())
     assert {type(s).__name__ for s in heard} == {"SourceTrade", "SourceQuote"}
     assert all(s.symbol == "SPY" for s in heard)
-    assert streamer.session.opened == 1 and streamer.session.messages >= 1
+    assert streamer.state.opened == 1 and streamer.state.messages >= 1
 
 
 def test_a_dropped_session_is_opened_again(tmp_path: Path) -> None:
@@ -159,15 +160,20 @@ def test_a_dropped_session_is_opened_again(tmp_path: Path) -> None:
     async def no_sleep(_: float) -> None:
         pass
 
-    streamer = Streamer(make, nothing, nothing, sleep=no_sleep)
+    async def caught(since: dict[str, int]) -> int:
+        reopened.append(since["SPY"])
+        return 0
 
-    async def caught(at: int) -> None:
-        reopened.append(at)
-
-    streamer.reopened = caught
+    streamer = Streamer(make, nothing, nothing, caught_up=caught, sleep=no_sleep)
     streamer.want(["SPY"])
-    asyncio.run(asyncio.wait_for(streamer.run(sessions=2), 5))
-    assert len(opened) == 2 and streamer.session.reconnects == 2
+
+    async def twice() -> None:
+        # The SDK's supervisor (0.35): each session held once.
+        await streamer.run(once=True)
+        await streamer.run(once=True)
+
+    asyncio.run(asyncio.wait_for(twice(), 5))
+    assert len(opened) == 2 and streamer.state.reconnects == 2
     assert len(reopened) == 1 and reopened[0] > 0
 
 
@@ -206,3 +212,23 @@ def test_frames_as_rfc_6455_says() -> None:
     assert pong[0] == 0x8A and pong[1] == 0x80 | 2
     mask = pong[2:6]
     assert bytes(b ^ mask[i % 4] for i, b in enumerate(pong[6:])) == b"hi"
+
+
+def test_a_message_that_converts_to_nothing_is_still_handed_on(tmp_path: Path) -> None:
+    # A status frame converts to no statement, yet is the stream's sign of
+    # life: handed on empty, so the feed's liveness is recorded.
+    handed: list[list[Any]] = []
+
+    async def hear(stated: list[Any]) -> None:
+        handed.append(list(stated))
+
+    async def nothing(*_: Any) -> None:
+        pass
+
+    socket = Socket(
+        CONNECTED, AUTHENTICATED, [{"ev": "status", "status": "success", "message": "subscribed"}]
+    )
+    streamer = Streamer(lambda: feed(tmp_path, socket), hear, nothing)
+    streamer.want(["SPY"])
+    asyncio.run(asyncio.wait_for(streamer.run(once=True), 5))
+    assert handed == [[]] and streamer.state.messages == 1

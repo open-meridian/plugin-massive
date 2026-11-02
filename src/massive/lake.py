@@ -35,11 +35,12 @@ Massive's code at this source, and by its ISO 10383 MIC from Massive's
 exchanges list, so a deployment's venue master matches it by MIC without
 learning Massive's codes.
 
-**The edge, done here for now** (contract v28, rulings 424 and 518): each
-live price, quote and trade recorded unasked or for a standing want has its
-feed delay recorded (`roles.Latency.aged`, the `edge` hop) and is judged by
-the SDK's quality checks (`quality.EdgeChecks`). The SDK's listings feed
-records neither in 0.33.3; this glue goes when it does.
+**The edge** (contract v28, rulings 424 and 518): each live price, quote
+and trade recorded unasked or for a standing want has its feed delay
+recorded (`roles.Latency.aged`, the `edge` hop) and is judged by the SDK's
+quality checks (`quality.EdgeChecks`) -- the SDK's listings feed's work from
+open-meridian 0.35 (`listings.at_the_edge`), `Lake.at_the_edge` telling it
+only that a chain's standing wants stand too.
 """
 
 from __future__ import annotations
@@ -125,7 +126,10 @@ class Lake(listings.Feed):
 
     # ── Plans and names ──────────────────────────────────────────────────
 
-    def timeliness(self, asset_class: str) -> str:
+    def plan_of(self, asset_class: str) -> str:
+        """What an asset class's plan serves: `real_time`, `delayed` or
+        `end_of_day` (the SDK's `timeliness` is one plan's; Massive's are
+        two)."""
         return self.plans[asset_class]
 
     def use_plan(self, stocks: str, options: str) -> None:
@@ -145,7 +149,7 @@ class Lake(listings.Feed):
 
     def named(self, key: str) -> str:
         """A declared dataset's ID in the deployment, by its own key."""
-        return super().dataset(key)
+        return super().named(key)
 
     def in_force(self, key: str) -> str:
         """The dataset key a kind is recorded into now."""
@@ -200,11 +204,11 @@ class Lake(listings.Feed):
         known = getattr(self.source, "exchanges", {}).get(code)
         if known is not None and known.mic:
             identifiers.append(Identifier(scheme="iso10383", value=known.mic))
-        found = await self.plugin.resolve_venue(identifiers=identifiers, as_of_ns=now)
+        found = await self.resolve_venue(identifiers=identifiers, as_of_ns=now)
         if found.found and found.venue.venue_id:
             self._venues[code] = (found.venue.venue_id, now)
             return found.venue.venue_id, []
-        await self.plugin.report_missing_venue(
+        await self.report_missing_venue(
             source=self.source_name,
             identifiers=identifiers,
             as_of_ns=now,
@@ -231,34 +235,17 @@ class Lake(listings.Feed):
     async def quote_row(self, stated: Any, subject: str) -> Any:
         return self._clocks(await super().quote_row(stated, subject), stated)
 
-    # ── The edge (contract v28) ──────────────────────────────────────────
+    # ── The edge (contract v28; the SDK's from 0.35) ─────────────────────
 
     def at_the_edge(self, key: str, rows: list[Any], want_id: str) -> list[Any]:
-        """Rows of the dataset `key` recorded unasked or for a standing
-        want, their age at the edge recorded and judged by the SDK's
-        checks; rows pulled for a read as they are. A chain's rows are
-        judged series by series (their subject is the underlying)."""
-        standing = {w.want_id for w in self.standing.values()}
+        """The SDK's edge (`listings.at_the_edge`: each row recorded unasked
+        or for a standing want aged and judged, a chain's within its
+        series), told that a chain's standing wants stand too."""
+        chained = set()
         for held in self.chains.underlyings.values():
-            standing |= set(held.standing) | set(held.trades)
-        if want_id and want_id not in standing:
-            return rows
-        dataset = self.named(key)
-        if self.latency is not None:
-            for row in rows:
-                self.latency.aged(dataset, "AGE_HOP_EDGE", row)
-        if key not in (OPTIONS, OPTIONS_DELAYED):
-            return self.quality.judged(key, rows)
-        out: list[Any] = []
-        for row in rows:
-            series = row.meta.series_key[0].value if row.meta.series_key else ""
-            out.extend(self.quality.judged(f"{key}/{series}", [row]))
+            chained |= set(held.standing) | set(held.trades)
+        out: list[Any] = super().at_the_edge(key, rows, "" if want_id in chained else want_id)
         return out
-
-    async def _record(self, key: str, data_type: str, rows: Any, want_id: str) -> None:
-        if key in (LIVE, TRADES) and data_type in (PRICE, QUOTE, TRADE):
-            rows = self.at_the_edge(self.in_force(key), list(rows), want_id)
-        await super()._record(key, data_type, rows, want_id)
 
     # ── Wants ────────────────────────────────────────────────────────────
 
@@ -278,7 +265,7 @@ class Lake(listings.Feed):
             return "not_covered"
         return ""
 
-    async def on_want(self, heard: Any) -> None:
+    async def on_observations_wanted(self, heard: Any) -> None:
         """A want of a chain is chains.py's; one this plan does not serve is
         declined, not covered; any other is the SDK's to answer."""
         want: ops.ObservationsWantedEvent = heard.message
@@ -293,12 +280,12 @@ class Lake(listings.Feed):
             subjects = [s.entity_id for s in want.subjects]
             await self._decline(key, want.want_id, subjects, reason, settled=False)
             return
-        await super().on_want(heard)
+        await super().on_observations_wanted(heard)
 
-    async def on_withdrawn(self, heard: Any) -> None:
+    async def on_want_withdrawn(self, heard: Any) -> None:
         """A standing want withdrawn, a chain's among them."""
         self.chains.withdraw(heard.message.want_id)
-        await super().on_withdrawn(heard)
+        await super().on_want_withdrawn(heard)
 
     async def reference(self) -> None:
         """Massive's exchanges and trade conditions, read once a day before

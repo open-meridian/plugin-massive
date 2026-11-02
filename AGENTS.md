@@ -1,7 +1,7 @@
 # massive
 
 Massive's US stock and option market data as an Open Meridian data plugin,
-in Python on the open-meridian SDK (0.33.3, contract v28). It runs beside a
+in Python on the open-meridian SDK (0.35.2, contract v29). It runs beside a
 sidecar in a Meridian deployment and reads Massive's REST and WebSocket APIs
 (massive.com/docs; Polygon.io until October 2025) with the account holder's
 own key, putting what it reads into the deployment's lake. What it may
@@ -36,18 +36,28 @@ timeliness.
   Massive's: the dataset each kind is recorded into by plan, the venue
   resolved by Massive's code and its MIC, both of Massive's clocks, the
   sequence number that keys a trade alike from the stream and the history
-  (so a range is read and a gap caught up), and the edge's feed delay and
-  quality checks (TEMPORARY until the SDK's listings feed takes them over).
+  (so a range is read and a gap caught up). The edge's feed delay and
+  quality checks are the SDK's listings feed's from open-meridian 0.35
+  (`listings.at_the_edge`); `Lake.at_the_edge` tells it only that a
+  chain's standing wants stand too.
 - `src/massive/chains.py`: option chains through the SDK's
-  `meridian.roles.chains` helpers, under the underlying and keyed by OCC OSI
+  `meridian.helpers.chains` helpers, under the underlying and keyed by OCC OSI
   symbol: never resolve, mint or request a series' record (561). Only the
   expirations or series a want names are read; a standing want kept current
   at most once a minute; open interest dated by the deployment's calendar
   (ReadCalendar) or not recorded; option trades streamed for a standing
   want. Greeks are never read (the engine computes its own).
 - `src/massive/stream.py` and `ws.py`: Massive's WebSocket clusters, stocks
-  and options, a standard-library WebSocket of the plugin's own; one
-  session per cluster, reconnecting, every frame kept first.
+  and options, a standard-library WebSocket of the plugin's own (rulings
+  1027 and 1038); one session per cluster, kept open by the SDK's
+  supervisor (`Streamer`, a `helpers.sessions.Supervisor`), every frame
+  kept first.
+- `src/massive/__main__.py`: the data role's class, `Market` (lake.py's
+  `Lake`, the SDK's listings feed; open-meridian 0.35), registered with
+  `meridian.run`, which applies the settings (`Market.on_settings`), serves
+  the pages, sets the figures and restarts `Market.run` -- the two streams,
+  the timetable, the licences and the latency reports -- after a backoff
+  should it fail.
 - `src/massive/page.py`, `records.py` and `templates/`: the data role's two
   pages under Manage, Connection and Datasets, each a read tool
   (`read_connection`, `read_datasets`). The templates extend the role's and
@@ -90,7 +100,7 @@ sidecar in a Meridian deployment and reaches nothing else: what it may publish
 and subscribe to comes from the roles `pyproject.toml` declares under
 `[tool.meridian]`, once a deployment admin approves them.
 
-- `src/massive/__main__.py` connects to the sidecar and serves the
+- `src/massive/__main__.py` runs the plugin (`meridian.run`) and serves the
   pages; `src/massive/page.py` declares them, each a view function
   and a template under `templates/`, built on the plugin UI kit (below).
 - A save changes what the plugin does, never what it is allowed to do. Roles

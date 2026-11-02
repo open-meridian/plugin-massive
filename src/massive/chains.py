@@ -14,7 +14,7 @@ recorded into `options_delayed`, which then holds no statistic either.
 **Never minted, never resolved** (ruling 561, W10.4): every row names the
 underlying's record as its subject and the series by its OCC OSI symbol
 (`occ_osi`, W1.26) as its series key, through the SDK's helpers
-(`meridian.roles.chains`): each series' terms as the platform's
+(`meridian.helpers.chains`): each series' terms as the platform's
 listed-option template's fields (`TPL-listed-option`, version 1; ruling
 617), its best bid and offer as a quote, its open interest and volume as
 statistics, its trades as trades. A series gets an `INS-` record only when a
@@ -72,9 +72,10 @@ from typing import Any
 
 from meridian.edge import as_reported
 from meridian.errors import MeridianError
+from meridian.helpers import chains as helpers
 from meridian.operations import Eligibility, Money, Quote, SourceTime, Trade, TradeAttributes
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles import chains as helpers
+from meridian.roles.data import SentRows
 from meridian.roles.data.listings import Counts
 
 from .convert import (
@@ -189,7 +190,7 @@ class Chains:
         #: When each chain read of the last minute was made.
         self.calls: deque[int] = deque()
         #: Each row's last sending, by (data type, dataset, row key).
-        self.sent: OrderedDict[tuple[str, str, str], str] = OrderedDict()
+        self.sent = SentRows(REMEMBERED)
         #: Each trade recorded, by row key: none sent twice.
         self.recent: OrderedDict[str, None] = OrderedDict()
         #: Market days as the deployment's calendar states them.
@@ -220,7 +221,7 @@ class Chains:
     # ── Names ────────────────────────────────────────────────────────────
 
     def timeliness(self) -> str:
-        return str(self.lake.timeliness("options"))
+        return str(self.lake.plan_of("options"))
 
     def key(self) -> str:
         """The chain's dataset the plan provides now."""
@@ -439,7 +440,7 @@ class Chains:
             return False
         self.liveness_ns = self.alive_ns
         try:
-            await self.lake.plugin.record_liveness(
+            await self.lake.record_liveness(
                 liveness=[
                     ops.DatasetLiveness(
                         dataset=self.dataset(), venue_id="", alive_at_ns=self.alive_ns
@@ -488,7 +489,7 @@ class Chains:
             return None
         self.calendar_read = span
         try:
-            answer = await self.lake.plugin.read_calendar(
+            answer = await self.lake.read_calendar(
                 calendar_id=self.lake.calendar_id, from_date=span[0], to_date=span[1]
             )
         except (MeridianError, ValueError) as failed:
@@ -535,19 +536,6 @@ class Chains:
                 return {"open_interest": day.isoformat()}
         return {}
 
-    # ── Recording (W10.4) ────────────────────────────────────────────────
-
-    def _changed(self, data_type: str, dataset: str, row_key: str, said: str) -> bool:
-        """Whether a row says something other than its last sending."""
-        mark = (data_type, dataset, row_key)
-        if self.sent.get(mark) == said:
-            return False
-        self.sent[mark] = said
-        self.sent.move_to_end(mark)
-        while len(self.sent) > REMEMBERED:
-            self.sent.popitem(last=False)
-        return True
-
     def series_row(self, held: Underlying, contract: Contract, dataset: str) -> Any | None:
         raw = self.lake.plugin.raw_record(contract.raw_key[:256])
         try:
@@ -580,7 +568,7 @@ class Chains:
             if row is None:
                 continue
             terms = repr([(f.path, f.value) for f in row.fields])
-            if self._changed(SERIES, dataset, contract.osi, terms):
+            if self.sent.changed(SERIES, dataset, contract.osi, terms):
                 rows.append(row)
         if rows:
             await self.send("series", rows, want_id)
@@ -604,12 +592,12 @@ class Chains:
                 row = self.series_row(held, contract, dataset)
                 if row is not None:
                     terms = repr([(f.path, f.value) for f in row.fields])
-                    if self._changed(SERIES, dataset, option.osi, terms):
+                    if self.sent.changed(SERIES, dataset, option.osi, terms):
                         series.append(row)
             quote = self.quote(held.subject, option, key, dataset, raw) if quotes_held else None
             if quote is not None:
                 said = repr((quote.bid, quote.ask, quote.bid_quantity, quote.ask_quantity))
-                if self._changed(QUOTE, dataset, option.osi, said):
+                if self.sent.changed(QUOTE, dataset, option.osi, said):
                     quotes.append(quote)
             stated: list[tuple[str, Decimal | None, str]] = [
                 ("open_interest", option.open_interest, dates.get("open_interest", "")),
@@ -626,7 +614,7 @@ class Chains:
                     held.subject, key, kind, value, day, dataset=dataset, valid_from_ns=now, raw=raw
                 )
                 assert stat.meta is not None
-                if self._changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
+                if self.sent.changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
                     statistics.append(stat)
         if series:
             await self.send("series", series, want_id)
@@ -660,7 +648,7 @@ class Chains:
 
     async def send(self, kind: str, rows: Sequence[Any], want_id: str) -> None:
         """Rows in the lake's batches, against the want, counted."""
-        call = getattr(self.lake.plugin, f"record_{kind}")
+        call = getattr(self.lake, f"record_{kind}")
         counts = self.counts
         for start in range(0, len(rows), BATCH):
             done = await call(**{kind: list(rows[start : start + BATCH])}, want_id=want_id)

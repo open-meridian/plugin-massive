@@ -67,7 +67,7 @@ async def worked(keyed: bool = True) -> State:
     stand_in.instruments.hold(SPY, ops.Identifier(scheme="symbol", value="SPY", source="massive"))
     store = RawStore(Path(tempfile.mkdtemp(prefix="massive-preview-")), kind="responses")
     config = config_from({"sample_data": True}) if keyed else Config()
-    lake = Lake(stand_in, None, Products(None))
+    lake = stand_in.bind(Lake(None, Products(None)))
     state = State(config=config, lake=lake)
 
     async def nothing(*_: object) -> None:
@@ -99,10 +99,10 @@ async def worked(keyed: bool = True) -> State:
         _want("want-tape", "options", "meridian.v1.Trade", standing=True,
               expiration_from=expiry.isoformat(), expiration_to=expiry.isoformat()),
     ):  # fmt: skip
-        await lake.on_want(heard)
-    state.stocks.session.state, state.stocks.session.subscribed = "streaming", len(lake.streamed)
-    state.options.session.state = "streaming"
-    state.options.session.subscribed = len(lake.chains.streamed)
+        await lake.on_observations_wanted(heard)
+    state.stocks.state.state, state.stocks.state.subscribed = "open", tuple(lake.streamed)
+    state.options.state.state = "open"
+    state.options.state.subscribed = tuple(lake.chains.streamed)
     return state
 
 
