@@ -212,3 +212,23 @@ def test_frames_as_rfc_6455_says() -> None:
     assert pong[0] == 0x8A and pong[1] == 0x80 | 2
     mask = pong[2:6]
     assert bytes(b ^ mask[i % 4] for i, b in enumerate(pong[6:])) == b"hi"
+
+
+def test_a_message_that_converts_to_nothing_is_still_handed_on(tmp_path: Path) -> None:
+    # A status frame converts to no statement, yet is the stream's sign of
+    # life: handed on empty, so the feed's liveness is recorded.
+    handed: list[list[Any]] = []
+
+    async def hear(stated: list[Any]) -> None:
+        handed.append(list(stated))
+
+    async def nothing(*_: Any) -> None:
+        pass
+
+    socket = Socket(
+        CONNECTED, AUTHENTICATED, [{"ev": "status", "status": "success", "message": "subscribed"}]
+    )
+    streamer = Streamer(lambda: feed(tmp_path, socket), hear, nothing)
+    streamer.want(["SPY"])
+    asyncio.run(asyncio.wait_for(streamer.run(once=True), 5))
+    assert handed == [[]] and streamer.state.messages == 1

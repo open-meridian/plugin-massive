@@ -20,7 +20,8 @@ open-meridian 0.35.2 (each role one class; rulings 1003 to 1005 and 1009 to
   plugin's standard-library client (ruling 1038). Each wait between
   sessions is now jittered, a stocks reconnect's gap is caught up from when
   each listing was last heard, and each stream's signs of life and
-  reconnects are on Connection's Sessions.
+  reconnects are on Connection's Sessions. A message that converts to
+  nothing (a status) is still handed on, the feed's sign of life.
 - **The edge** is the SDK's listings feed's (`listings.at_the_edge`); the
   plugin's temporary copy is gone, a chain's standing wants told to it.
 - **Each row once** through the SDK's `SentRows`, in place of its own copy.

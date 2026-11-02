@@ -197,9 +197,10 @@ class Streamer(sessions.Supervisor):
     `flush`; after a reopen, the gap since each listing was last heard
     handed to `caught_up` (the stocks' trade history). A refused key is
     waited out `REFUSED_WAIT`; any other break the supervisor's backoff,
-    a second doubling to a minute. What Massive says of a subscription it
-    does not serve (the feed's `said`) is the session's last error, the
-    session kept."""
+    a second doubling to a minute. Every message is handed on, one that
+    converted to nothing as an empty list: the feed's sign of life. What
+    Massive says of a subscription it does not serve (the feed's `said`) is
+    the session's last error, the session kept."""
 
     def __init__(
         self,
@@ -209,12 +210,22 @@ class Streamer(sessions.Supervisor):
         **kwargs: Any,
     ) -> None:
         self._feed: Feed | None = None
+        self._handed = 0
 
         def made() -> Feed | None:
             self._feed = make_feed()
             return self._feed
 
+        async def told(stated: list[Any]) -> None:
+            self._handed = self.state.messages
+            await heard(stated)
+
         async def flushed() -> None:
+            # A message that converted to nothing (a status) is still the
+            # stream's sign of life: handed on empty, as each was before.
+            if self._handed != self.state.messages:
+                self._handed = self.state.messages
+                await heard([])
             said = getattr(self._feed, "said", "")
             if said:
                 self.state.last_error = said
@@ -224,7 +235,7 @@ class Streamer(sessions.Supervisor):
         kwargs.setdefault("backoff", sessions.Backoff(first_s=FIRST_WAIT, most_s=MOST_WAIT))
         super().__init__(
             made,
-            heard=heard,
+            heard=told,
             flush=flushed,
             refused=(Refused,),
             refused_seconds=REFUSED_WAIT,
