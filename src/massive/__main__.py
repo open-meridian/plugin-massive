@@ -1,9 +1,11 @@
 """The Massive plugin: Massive's US stock and option market data in an Open
 Meridian deployment's lake, as a data plugin.
 
-It connects to the sidecar it is launched beside with its whole declaration
-(declaration.py): its catalogue, its storage, its settings, its pages
-(page.py) and its documentation; and serves the pages. On each delivery of
+It runs as the SDK runs a plugin (open-meridian 0.35, `meridian.run`): its
+data role's class (`Market`, the SDK's listings feed with Massive's own,
+lake.py) registered on the sidecar it is launched beside with its whole
+declaration (declaration.py) -- its catalogue, its storage, its settings,
+its pages (page.py) and its documentation -- and the pages served. On each delivery of
 its settings it makes its Massive client again with the key (or, with sample
 data, the built-in exchange), sets each asset class's dataset and pace from
 its plan, and asks whether Massive answers the key; it reads which of its
@@ -14,8 +16,8 @@ timetable: standing wants kept current, days still forming read again, a
 final close pushed, the chains due read, the reference tables read daily.
 While a standing want stands, it streams Massive's trades and, on a
 real-time plan, quotes for the listings wanted, and the option trades of the
-series wanted (stream.py), reconnecting when a stream breaks and catching
-the gap up from the trade history.
+series wanted (stream.py), each stream kept open by the SDK's supervisor,
+reconnecting when it breaks and catching the gap up from the trade history.
 
 It holds nothing it cannot lose: which listing each subject is, and every
 raw answer, are in the storage the deployment grants it (decisions/028); a
@@ -26,11 +28,7 @@ secret setting, never logged, shown or sent anywhere but Massive.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
-import signal
-from collections.abc import Callable, Coroutine
-from datetime import UTC, datetime
 from typing import Any
 
 import meridian
@@ -39,9 +37,9 @@ from meridian.edge import RawStore, storage_root
 from meridian.roles import Latency
 
 from .declaration import DECLARATION, PORT
-from .declared import KIND, WINDOW_DAYS
+from .declared import KIND
 from .lake import Lake, Products
-from .page import State, figures, serve
+from .page import State, figures, pages, use
 from .settings import END_OF_DAY, REAL_TIME, Credentials, config_from
 from .source import MassiveSource
 from .stream import MassiveFeed, Streamer
@@ -94,188 +92,155 @@ def feed_for(state: State, store: RawStore, cluster: str) -> MassiveFeed | None:
     return MassiveFeed(cluster, base, config.credentials, channels, store)
 
 
-async def health(plugin: meridian.Plugin, state: State) -> None:
-    """Say how the source is, on the heartbeat: a missing key or a refused one
-    is the plugin's health, never a ticket."""
-    if state.config.sample_data:
-        await say(plugin, state, True, "sample data: the built-in exchange")
-        return
-    source = state.source
-    if source is None:
-        await say(plugin, state, False, "no Massive API key: enter it in Settings")
-        return
-    try:
-        answer = await asyncio.to_thread(source.probe, True)
-    except OSError as failed:
-        await say(plugin, state, False, f"Massive did not answer: {failed}")
-        return
-    if not answer.answered:
-        await say(plugin, state, False, f"Massive refused the key: {answer.detail}")
-        return
-    await say(plugin, state, True, "answering")
-
-
-async def say(plugin: meridian.Plugin, state: State, healthy: bool, detail: str) -> None:
-    """The plugin's health, with the data role's figures as they stand."""
-    await plugin.report(healthy=healthy, detail=detail[:200], figures=figures(state))
-
-
-async def read_licences(plugin: Any, state: State) -> None:
+async def read_licences(role: Any, state: State) -> None:
     """Which of its own declared datasets a deployment admin has licensed
     (contract v20, W10.9), for the Datasets page."""
-    answered = await plugin.list_datasets()
+    answered = await role.list_datasets()
     state.licensed = frozenset(licence.dataset for licence in answered.licences)
 
 
-async def licences(plugin: meridian.Plugin, state: State) -> None:
-    while True:
-        try:
-            await read_licences(plugin, state)
-        except meridian.MeridianError as failed:
-            log.warning("the datasets' licences were not read this time: %s", failed)
-        await asyncio.sleep(LICENCES_SECONDS)
-
-
-async def apply(plugin: meridian.Plugin, state: State, store: RawStore, delivered: Any) -> None:
-    """One delivery of the settings: the client made again, the plans set,
-    the stream restarted, and the raw answers past their window moved. The
-    key's value is never logged: only whether it is set."""
-    state.config = config_from(delivered.values, delivered.missing_required)
-    config = state.config
-    log.info(
-        "settings delivered: sample data %s, a key %s, stocks %s, options %s",
-        config.sample_data, "set" if config.token_set else "not set",
-        config.timeliness("stocks"), config.timeliness("options"),
-    )  # fmt: skip
-    state.massive, state.source = source_for(state, store)
-    lake = state.lake
-    if lake is not None:
-        lake.source = state.source
-        lake.use_plan(config.timeliness("stocks"), config.timeliness("options"))
-        if config.sample_data:
-            # The built-in exchange's listings, as a source's own list.
-            await lake.seed(sorted(exchange()["daily"]))
-    await health(plugin, state)
-    if lake is not None:
-        lake.restream()
-        lake.chains.restream()
-    for streamer in (state.stocks, state.options):
-        if streamer is not None:
-            streamer.restart()
-    window = delivered.values.get(f"{KIND}_window_days")
-    past = delivered.values.get(f"{KIND}_past_window")
-    try:
-        await store.tend(
-            plugin,
-            window if isinstance(window, int) else WINDOW_DAYS,
-            past if isinstance(past, str) else "kept",
-            datetime.now(UTC).date(),
-        )
-    except (meridian.MeridianError, OSError) as failed:
-        log.warning("the raw answers were not tended this time: %s", failed)
-
-
-async def watch_settings(
-    plugin: meridian.Plugin, state: State, store: RawStore, configured: asyncio.Event
-) -> None:
-    async for delivered in plugin.settings():
-        await apply(plugin, state, store, delivered)
-        configured.set()
-
-
-async def timetable(plugin: meridian.Plugin, state: State, lake: Lake) -> None:
-    while True:
-        try:
-            await lake.tick()
-        except meridian.MeridianError as failed:
-            log.warning("the timetable stopped this time: %s", failed)
-        plugin.figures = figures(state)
-        await asyncio.sleep(TICK_SECONDS)
-
-
-async def again(work: Callable[[], Coroutine[Any, Any, None]], what: str) -> None:
-    """A stream that stops (the deployment still starting, a sidecar
-    restarted) is said and opened again, a little later each time."""
-    wait = 1.0
-    while True:
-        try:
-            await work()
-            return
-        except asyncio.CancelledError:
-            raise
-        except Exception as failed:  # noqa: BLE001 - said, and opened again
-            log.warning("%s stopped (%s); again in %.0fs", what, failed, wait)
-        await asyncio.sleep(wait)
-        wait = min(wait * 2, 30.0)
-
-
 def streams(state: State, store: RawStore, lake: Lake) -> tuple[Streamer, Streamer]:
-    """The two streams: stocks into the listings feed, options into the
-    chains; a stocks reconnect's gap caught up from the trade history."""
-    stocks = Streamer(lambda: feed_for(state, store, "stocks"), lake.heard, lake.flush)
-
-    async def reopened(last_heard_ns: int) -> None:
-        await lake.caught_up({symbol: last_heard_ns for symbol in lake.streamed})
-
-    stocks.reopened = reopened
+    """The two streams, each kept open by the SDK's supervisor: stocks into
+    the listings feed, a reconnect's gap caught up from the trade history;
+    options into the chains."""
+    stocks = Streamer(
+        lambda: feed_for(state, store, "stocks"),
+        lake.heard,
+        lake.flush,
+        caught_up=lake.caught_up,
+        latency=lake.latency,
+        session="stocks",
+    )
     options = Streamer(
-        lambda: feed_for(state, store, "options"), lake.chains.heard, lake.chains.flush
+        lambda: feed_for(state, store, "options"),
+        lake.chains.heard,
+        lake.chains.flush,
+        latency=lake.latency,
+        session="options",
     )
     lake.streamer, lake.chains.streamer = stocks, options
     return stocks, options
 
 
-async def run() -> None:
-    stopped = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for stop in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(stop, stopped.set)
+class Market(Lake):
+    """The data role's class: Massive's listings and option chains in the
+    lake (lake.py, chains.py); the settings applied as they are delivered;
+    and in `run` its two streams kept open, its timetable kept, its
+    licences read and its latency reported -- each restarted by
+    `meridian.run` after a backoff should it stop."""
 
-    granted = edge.storage_dir()
-    store = RawStore(storage_root("massive-raw-"), kind=KIND)
-    async with await meridian.connect(declaration=DECLARATION) as plugin:
-        log.info("registered as %s", plugin.identity.instance_id)
-        lake = Lake(plugin, None, Products(granted / "products.json" if granted else None))
-        latency = Latency(plugin)
-        lake.latency = latency
-        state = State(lake=lake, latency=latency)
-        state.stocks, state.options = streams(state, store, lake)
-        configured = asyncio.Event()
-        page = serve(plugin, state, PORT)
-        tasks = [
-            asyncio.create_task(
-                again(lambda: watch_settings(plugin, state, store, configured), "the settings")
-            )
-        ]
-        await configured.wait()
+    def __init__(self) -> None:
+        granted = edge.storage_dir()
+        super().__init__(None, Products(granted / "products.json" if granted else None))
+        self.store = RawStore(storage_root("massive-raw-"), kind=KIND)
+        # The sessions' latency (contract v27) and each live row's age at
+        # the edge (contract v28), reported every ten seconds through this
+        # class (SDK 0.35).
+        self.latency = Latency()
+        self.state = State(lake=self, latency=self.latency)
+        self.state.stocks, self.state.options = streams(self.state, self.store, self)
 
-        async def hear() -> None:
-            await plugin.receive(observations_wanted=lake.on_want, want_withdrawn=lake.on_withdrawn)
+    async def on_settings(self, delivered: Any) -> None:
+        """One delivery of the settings, the first before anything is heard:
+        the client made again, the plans set, the streams restarted, and the
+        raw answers past their window moved. The key's value is never
+        logged: only whether it is set."""
+        state = self.state
+        state.config = config_from(delivered.values, delivered.missing)
+        config = state.config
+        log.info(
+            "settings delivered: sample data %s, a key %s, stocks %s, options %s",
+            config.sample_data, "set" if config.token_set else "not set",
+            config.timeliness("stocks"), config.timeliness("options"),
+        )  # fmt: skip
+        state.massive, state.source = source_for(state, self.store)
+        self.source = state.source
+        self.use_plan(config.timeliness("stocks"), config.timeliness("options"))
+        if config.sample_data:
+            # The built-in exchange's listings, as a source's own list.
+            await self.seed_symbols(sorted(exchange()["daily"]))
+        await self.health()
+        self.restream()
+        self.chains.restream()
+        for streamer in (state.stocks, state.options):
+            if streamer is not None:
+                streamer.restart()
+        try:
+            await self.store.tend(self.plugin, settings=delivered)
+        except (meridian.MeridianError, OSError, ValueError) as failed:
+            log.warning("the raw answers were not tended this time: %s", failed)
 
-        tasks += [
-            asyncio.create_task(again(hear, "hearing the lake")),
-            asyncio.create_task(again(lambda: licences(plugin, state), "the licences")),
-            asyncio.create_task(again(lambda: timetable(plugin, state, lake), "the timetable")),
-            asyncio.create_task(again(state.stocks.run, "the stocks stream")),
-            asyncio.create_task(again(state.options.run, "the options stream")),
-            asyncio.create_task(again(latency.run, "the latency reports")),
-        ]
-        log.info("serving its pages on 127.0.0.1:%d", PORT)
-        await stopped.wait()
-        log.info("stopping")
-        for task in tasks:
-            task.cancel()
-        for task in tasks:
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-        page.shutdown()
+    async def health(self) -> None:
+        """Say how the source is: a missing key or a refused one is the
+        plugin's health, never a ticket."""
+        state = self.state
+        if state.config.sample_data:
+            await self.say(True, "sample data: the built-in exchange")
+            return
+        source = state.source
+        if source is None:
+            await self.say(False, "no Massive API key: enter it in Settings")
+            return
+        try:
+            answer = await asyncio.to_thread(source.probe, True)
+        except OSError as failed:
+            await self.say(False, f"Massive did not answer: {failed}")
+            return
+        if not answer.answered:
+            await self.say(False, f"Massive refused the key: {answer.detail}")
+            return
+        await self.say(True, "answering")
+
+    async def say(self, healthy: bool, detail: str) -> None:
+        """The plugin's health, with the data role's figures as they stand."""
+        await self.plugin.report(healthy=healthy, detail=detail[:200], figures=figures(self.state))
+
+    async def on_start(self) -> None:
+        self.latency.role = self
+
+    async def run(self) -> None:
+        state = self.state
+        assert state.stocks is not None and state.options is not None
+        await asyncio.gather(
+            state.stocks.run(),
+            state.options.run(),
+            self._timetable(),
+            self._licences(),
+            self.latency.run(),
+        )
+
+    async def _timetable(self) -> None:
+        while True:
+            try:
+                await self.tick()
+            except meridian.MeridianError as failed:
+                log.warning("the timetable stopped this time: %s", failed)
+            await asyncio.sleep(TICK_SECONDS)
+
+    async def _licences(self) -> None:
+        """The licences, read on start and every minute."""
+        while True:
+            try:
+                await read_licences(self, self.state)
+            except meridian.MeridianError as failed:
+                log.warning("the datasets' licences were not read this time: %s", failed)
+            await asyncio.sleep(LICENCES_SECONDS)
 
 
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    asyncio.run(run())
+    market = Market()
+    use(market.state)
+    meridian.run(
+        DECLARATION,
+        roles=[market],
+        pages=pages,
+        port=PORT,
+        on_settings=market.on_settings,
+        figures=lambda: figures(market.state),
+    )
 
 
 if __name__ == "__main__":

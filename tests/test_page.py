@@ -45,7 +45,7 @@ def state(tmp: Path, config: Config) -> State:
         pass
 
     stocks = Streamer(lambda: None, nothing, nothing)
-    stocks.session.state, stocks.session.subscribed = "streaming", 1
+    stocks.state.state, stocks.state.subscribed = "open", ("SPY",)
     options = Streamer(lambda: None, nothing, nothing)
     assert lake.source is not None
     return State(

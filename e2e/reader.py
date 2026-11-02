@@ -35,6 +35,7 @@ import meridian
 from meridian import Interface, Page, SourceChoice
 from meridian.operations import as_decimal, as_money
 from meridian.plugin.v1 import operations_pb2 as ops
+from meridian.roles import custody, reporting, signal
 
 PORT = 8000
 LOOP = asyncio.new_event_loop()
@@ -82,15 +83,34 @@ def unanswered(answer):
              "reason": ops.UnansweredReason.Name(u.reason)} for u in answer.unanswered]
 
 
+class Custody(custody.Role):
+    """`custody`: names the listings it asks about as a custodian's book
+    would, by resolving their identifiers."""
+
+
+class Reporting(reporting.Role):
+    """`reporting`: reads prices and bars."""
+
+
+class Signal(signal.Role):
+    """`signal`: reads quotes and trades, which `reporting` does not."""
+
+
 class Reader:
-    def __init__(self, plugin):
-        self.plugin = plugin
+    """What the stand-in answers, through its role classes (SDK 0.35: each
+    role one class, its acts made through it). It hears nothing: each read
+    is asked when the runner asks."""
+
+    def __init__(self):
+        self.custody = Custody()
+        self.reporting = Reporting()
+        self.signal = Signal()
         self.ids = {}
 
     async def resolve(self):
         for name, identifiers in ASKED.items():
             if name not in self.ids:
-                found = await self.plugin.resolve_identifier(
+                found = await self.custody.resolve_identifier(
                     identifiers=identifiers, stated_description=STATED[name], stated_currency="USD"
                 )
                 if not found.instrument_id:
@@ -110,7 +130,7 @@ class Reader:
         asked, one = self.asked(query)
         if one("kind"):
             asked["kinds"] = [one("kind")]
-        answer = await self.plugin.list_prices(**asked)
+        answer = await self.reporting.list_prices(**asked)
         rows = []
         for price in answer.prices:
             money = as_money(price.price)
@@ -121,7 +141,7 @@ class Reader:
 
     async def bars(self, query):
         asked, _ = self.asked(query)
-        answer = await self.plugin.list_bars(**asked)
+        answer = await self.reporting.list_bars(**asked)
         rows = []
         for bar in answer.bars:
             rows.append({**meta_json(bar.meta), "close": str(as_money(bar.close).amount),
@@ -131,7 +151,7 @@ class Reader:
 
     async def quotes(self, query):
         asked, _ = self.asked(query)
-        answer = await self.plugin.list_quotes(**asked)
+        answer = await self.signal.list_quotes(**asked)
         rows = []
         for quote in answer.quotes:
             side = lambda name: str(as_money(getattr(quote, name)).amount) if quote.HasField(name) else None
@@ -147,7 +167,7 @@ class Reader:
             asked["after_watermark"] = ops.Watermark.FromString(base64.urlsafe_b64decode(one("after")))
         else:
             asked["valid_from_ns"], asked["valid_until_ns"] = int(one("from")), int(one("until"))
-        answer = await self.plugin.list_trades(**asked)
+        answer = await self.signal.list_trades(**asked)
         rows = []
         for trade in answer.trades:
             eligible = lambda e: [ops.Eligible.Name(getattr(e, f)) for f in ("high_low", "open", "close", "volume")]
@@ -210,17 +230,18 @@ DECLARATION = meridian.Declaration(
 )
 
 
-async def main():
-    plugin = await meridian.connect(
+def main():
+    reader = Reader()
+    threading.Thread(target=serve, args=(reader,), daemon=True).start()
+    # SDK 0.35: its role classes registered on one connection, until the
+    # harness stops it.
+    LOOP.run_until_complete(meridian.run_async(
         # Contract v25: what the stand-in registers is its declaration.
-        declaration=DECLARATION
-    )
-    print("reader registered as", plugin.identity.instance_id, flush=True)
-    threading.Thread(target=serve, args=(Reader(plugin),), daemon=True).start()
-    while True:
-        await asyncio.sleep(3600)
+        declaration=DECLARATION,
+        roles=[reader.custody, reader.reporting, reader.signal],
+    ))
 
 
 if __name__ == "__main__":
     asyncio.set_event_loop(LOOP)
-    LOOP.run_until_complete(main())
+    main()

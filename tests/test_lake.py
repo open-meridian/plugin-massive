@@ -28,6 +28,7 @@ from conftest import (
     answer_records,
     at,
     calendar,
+    hear_row,
     synthetic_lake,
     want,
 )
@@ -54,7 +55,7 @@ def hear(recorder: Recorder, held: Any, *events: ops.ObservationsWantedEvent) ->
     async def go() -> None:
         for event in events:
             recorder.answer("ObservationsWanted", _given(event))
-            await recorder.receive(observations_wanted=held.on_want)
+            await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
 
     asyncio.run(go())
 
@@ -314,7 +315,7 @@ def test_option_trades_are_streamed_for_the_series_wanted(tmp_path: Path) -> Non
         recorder.answer(
             "WantWithdrawn", lambda _: [ops.WantWithdrawnEvent(want_id="WNT-T", dataset="x")]
         )
-        await recorder.receive(want_withdrawn=held.on_withdrawn)
+        await hear_row(recorder, "WantWithdrawn", held.on_want_withdrawn)
 
     asyncio.run(withdraw())
     assert held.chains.streamed == []

@@ -50,6 +50,7 @@ from conftest import (
     answer_calendar,
     answer_records,
     at,
+    hear_row,
     synthetic_lake,
     want,
 )
@@ -62,6 +63,18 @@ DURING = at("2026-10-09", 15)
 
 Producer = Callable[[Recorder], Awaitable[None]]
 
+#: Contract v29's data cases (SDK 0.34), neither of them Massive's. Apart,
+#: as meridian 0.1.57's role-suite rule does not know them yet.
+V29_NOT_PRESENTED = dict(
+    (
+        (
+            "records-a-derived-series",
+            "it records Massive's stock and option data as stated: no index level or other "
+            "series derived by its publisher",
+        ),
+        ("records-a-pools-factor", "Massive's stock and option feeds state no pool's factor"),
+    )
+)
 NOT_PRESENTED: dict[str, str] = {
     "an-fx-rate": "Massive's stock and option feeds state no currency's rate",
     "a-stablecoin-quote": "Massive's stock and option feeds state no crypto asset's price",
@@ -94,6 +107,7 @@ NOT_PRESENTED: dict[str, str] = {
     "rows-after-a-gap-are-suspicious": (
         "Massive's sequence numbers increase per ticker but skip by design: a skip is no gap"
     ),
+    **V29_NOT_PRESENTED,
 }
 
 #: A moment in the session, for the stream's events: epoch milliseconds.
@@ -120,17 +134,17 @@ def producers(tmp: Path) -> dict[str, Producer]:
     ) -> Any:
         held = lake(recorder, now)
         recorder.answer("ObservationsWanted", lambda _: event)
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
         return held
 
     async def daily_close(recorder: Recorder) -> None:
         # The plugin resolves a listing by its own symbol, then records the
         # close the lake wants for it.
         held = lake(recorder)
-        await held.seed(["BRK.B"])
+        await held.seed_symbols(["BRK.B"])
         (subject,) = held.products.symbols
         recorder.answer("ObservationsWanted", lambda _: want(subject, business_date=DAY))
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
 
     async def forming(recorder: Recorder) -> None:
         clock = Clock(DURING)
@@ -155,7 +169,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
         made = synthetic_lake(recorder, Clock(AFTER), tmp / uuid.uuid4().hex, held=held)
         asked = want(BRK, data_type="meridian.v1.Bar", business_date=DAY)
         recorder.answer("ObservationsWanted", lambda _: asked)
-        await recorder.receive(observations_wanted=made.on_want)
+        await hear_row(recorder, "ObservationsWanted", made.on_observations_wanted)
 
     async def streamed(recorder: Recorder, *messages: dict[str, Any], subject: str = SPY) -> Any:
         # A standing want of the trades: the listing streamed, and what the
@@ -165,7 +179,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             subject, dataset="suite-plugin:trades", data_type="meridian.v1.Trade", standing=True
         )
         recorder.answer("ObservationsWanted", lambda _: asked)
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
         for n, said in enumerate(messages):
             await held.heard(convert.streamed(said, f"stream/suite#{n}"))
             await held.flush(force=True)
@@ -219,7 +233,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
         held.latency = latency
         asked = want(SPY, dataset="suite-plugin:live", data_type="meridian.v1.Quote", standing=True)
         recorder.answer("ObservationsWanted", lambda _: asked)
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
         await held.heard(
             convert.streamed(
                 quote(bp="673.87", bs=300, ap="673.89", **{"as": 200}, q=3), "stream/suite#d"
@@ -255,7 +269,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             SPY, dataset="suite-plugin:trades", data_type="meridian.v1.Trade", standing=True
         )
         recorder.answer("ObservationsWanted", lambda _: asked)
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
 
     async def ambiguous(recorder: Recorder) -> None:
         held = lake(recorder)
@@ -265,7 +279,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
                 found=False, miss_reason=ops.MISS_REASON_AMBIGUOUS
             ),
         )
-        await held.seed(["TQQQ"])
+        await held.seed_symbols(["TQQQ"])
 
     async def venue(recorder: Recorder) -> None:
         # SPY's last trade printed on the exchange Massive codes 12, resolved
@@ -279,7 +293,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             lambda _: ops.ResolveVenueResult(found=False, miss_reason=ops.MISS_REASON_NOT_FOUND),
         )
         recorder.answer("ObservationsWanted", lambda _: want(SPY, dataset="suite-plugin:live"))
-        await recorder.receive(observations_wanted=held.on_want)
+        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
 
     async def recorded_against(recorder: Recorder) -> None:
         await wanted(recorder, want(SPY, business_date=DAY))
@@ -315,7 +329,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             "WantWithdrawn",
             lambda _: [ops.WantWithdrawnEvent(want_id="WNT-9", dataset="suite-plugin:live")],
         )
-        await recorder.receive(want_withdrawn=held.on_withdrawn)
+        await hear_row(recorder, "WantWithdrawn", held.on_want_withdrawn)
         clock.now += 3600 * 10**9
         await held.tick()
 
