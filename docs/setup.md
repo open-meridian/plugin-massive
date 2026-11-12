@@ -31,8 +31,8 @@ yet", linking to Settings.
 A deployment admin, on the deployment's **Data sources** page, licenses the
 datasets your plans serve -- `daily`; `live` or `live_delayed`; `trades` or
 `trades_delayed`; `options` or `options_delayed` (option chains, licensed
-apart from the stock data) -- each starting from Massive's terms for
-individual plans, one person's use, and entitles the plugins that read
+apart from the stock data) -- each row describing Massive's terms in words;
+on an individual plan, one person's use -- and entitles the plugins that read
 prices, trades, quotes and option chains. Nothing is read from Massive until
 a plugin entitled to a dataset asks for it.
 

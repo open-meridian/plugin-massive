@@ -38,20 +38,19 @@ stock datasets, OPRA for the option chains -- and Massive as its
 aggregator (rulings 387 and 865). When the SDK carries the terms'
 `underlying_source` (ruling 896), each also names it there.
 
-**The terms Massive's standard terms impose** (`licence_default`), which the
-deployment's admin confirms or replaces on Data sources -- never whether a
-deployment meets them. Massive sells plans for individuals, "for personal,
-non-business use", and plans for businesses on their own terms; the default
-is the individual plans', the self-served ones: one person's
-(`personal_use`), shown to that person (`display`), derived data for their
-own use only (`internal_only`), never redistributed (`not_allowed`); the
-daily and chain datasets kept, the live ones served and not kept, the trades
-kept two days (a reader that lost some catches up from the lake). Massive's
-name is not affiliated (`not_affiliated_notice`). Who may take it
-(`eligibility`, personal and commercial uses, each under its own plan) is
-not declared yet: core's declaration parser does not carry it, so a
-registration declaring it is refused as differing from its upload. A
-summary, not legal advice; docs/terms.md says the same.
+**The terms and pricing Massive states** (contract 30, ruling 1032;
+`terms_and_pricing`), in plain words for each dataset: its source (the US
+equity SIPs, or OPRA) and Massive's plans -- individual plans for personal,
+non-business use, business plans on Massive's business terms, real time
+under the exchanges' agreements -- never a licence: the licence the
+deployment's admin sets on Data sources is the one enforced, and the plugin
+says nothing of whether a deployment meets anyone's terms. A summary, not
+legal advice; docs/terms.md says the same.
+
+**How a gap is recovered** (contract 30, `gap_recovery`): `daily`, the
+trades and the chains by `backfill` -- Massive serves each again, and a
+want asks for it; `live`, streamed, `stream_only`; `live_delayed`, pulled
+for the latest alone, `none`.
 
 **Storage**: one kind of raw record, Massive's answers and stream frames as
 received (never the key), a month by default.
@@ -59,7 +58,7 @@ received (never the key), a month by default.
 
 from __future__ import annotations
 
-from meridian import DatasetDeclaration, DatasetLicence, RecordKind
+from meridian import DatasetDeclaration, RecordKind
 
 from .chains import CADENCE_SECONDS as CHAIN_CADENCE_SECONDS
 from .chains import DATA_TYPES as CHAIN_DATA_TYPES
@@ -81,8 +80,6 @@ OPTIONS_SOURCE = "OPRA"
 AGGREGATOR = "Massive"
 #: How far behind real time a delayed plan serves: 15 minutes.
 DELAY_NS = 15 * 60 * 1_000_000_000
-#: How long the lake keeps a trade by default: two days (the plan's Q40).
-TRADES_KEPT_DAYS = 2
 #: How far back Massive's history reaches is its plan's: none is stated.
 HISTORY_DAYS = 0
 DAY_TIME_ZONE = "America/New_York"
@@ -99,24 +96,39 @@ NOT_AFFILIATED = (
 )
 
 
-def licence(kept: bool, retention_days: int = 0) -> DatasetLicence:
-    """Massive's individual plans' terms, as each dataset's default."""
-    return DatasetLicence(
-        kept=kept,
-        retention_days=retention_days,
-        derived_use_terms="internal_only",
-        display=True,
-        personal_use=True,
-        redistribution="not_allowed",
-        not_affiliated_notice=NOT_AFFILIATED,
-    )
+#: Massive's plans, as docs/terms.md summarises them: every dataset's terms
+#: end with these words.
+MASSIVE_TERMS = (
+    "Massive's individual plans (Basic, Starter, Developer, Advanced) are for personal, "
+    "non-business use; a business use needs a business plan, under Massive's business terms "
+    "and order form, which allow internal business use, display to your own authorised "
+    "users and derived works containing none of the data, bar redistributing the data "
+    "itself, and ask that the source's attribution and delay label travel with it. "
+    "Real-time data needs the exchanges' agreements, signed in your Massive dashboard; a "
+    "real-time plan for individuals asks that you be a non-professional. Prices are "
+    "Massive's, per plan, at massive.com. " + NOT_AFFILIATED
+)
+#: Each source, before Massive's words.
+EQUITY_TERMS = "The US equity SIPs' (CTA's and UTP's) consolidated data, carried by Massive. "
+OPTIONS_TERMS = "OPRA's consolidated options data, carried by Massive. "
+DELAYED_TERMS = "Delayed 15 minutes. "
+#: How a gap in each is recovered: Massive serves all but the latest prices
+#: again; the live quotes are streamed.
+GAP_RECOVERY = {
+    DAILY: "backfill",
+    LIVE: "stream_only",
+    LIVE_DELAYED: "none",
+    TRADES: "backfill",
+    TRADES_DELAYED: "backfill",
+    OPTIONS: "backfill",
+    OPTIONS_DELAYED: "backfill",
+}
 
 
 def _stock(
     key: str,
     data_types: list[str],
     modes: list[str],
-    kept: DatasetLicence,
     *,
     cadence: int = 0,
     delayed: bool = False,
@@ -130,7 +142,8 @@ def _stock(
         modes=modes,
         cadence=cadence,
         history=HISTORY_DAYS,
-        licence_default=kept,
+        terms_and_pricing=EQUITY_TERMS + (DELAYED_TERMS if delayed else "") + MASSIVE_TERMS,
+        gap_recovery=GAP_RECOVERY[key],
         day_time_zone=DAY_TIME_ZONE,
         day_end_minute=DAY_END_MINUTE,
         calendar_id=US_EQUITY_CALENDAR if calendar else "",
@@ -146,7 +159,8 @@ def _chain(key: str, delayed: bool) -> DatasetDeclaration:
         data_types=[*CHAIN_DATA_TYPES[key], "meridian.v1.Trade.source_sequence"],
         modes=["pull", "stream"],
         cadence=CHAIN_CADENCE_SECONDS,
-        licence_default=licence(kept=True),
+        terms_and_pricing=OPTIONS_TERMS + (DELAYED_TERMS if delayed else "") + MASSIVE_TERMS,
+        gap_recovery=GAP_RECOVERY[key],
         day_time_zone=DAY_TIME_ZONE,
         day_end_minute=DAY_END_MINUTE,
         calendar_id=US_EQUITY_CALENDAR,
@@ -166,7 +180,6 @@ CATALOGUE = (
             "meridian.v1.Bar.trade_count",
         ],
         ["pull", "push"],
-        licence(kept=True),
         cadence=86_400,
         calendar=True,
     ),  # fmt: skip
@@ -174,23 +187,20 @@ CATALOGUE = (
         LIVE,
         ["meridian.v1.Price", "meridian.v1.Quote"],
         ["pull", "stream"],
-        licence(kept=False),
         cadence=LIVE_CADENCE_SECONDS,
     ),
     _stock(
         LIVE_DELAYED,
         ["meridian.v1.Price"],
         ["pull"],
-        licence(kept=False),
         cadence=LIVE_CADENCE_SECONDS,
         delayed=True,
     ),
-    _stock(TRADES, TRADE_TYPES, ["pull", "stream"], licence(True, TRADES_KEPT_DAYS)),
+    _stock(TRADES, TRADE_TYPES, ["pull", "stream"]),
     _stock(
         TRADES_DELAYED,
         TRADE_TYPES,
         ["pull", "stream"],
-        licence(True, TRADES_KEPT_DAYS),
         delayed=True,
     ),  # fmt: skip
     _chain(OPTIONS, delayed=False),

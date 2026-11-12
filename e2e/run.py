@@ -10,8 +10,8 @@ Two plugins, from the same image: `massive`, this one; and `reader`
 1. The catalogue: the seven datasets listed by `dashboard__list_datasets` as
    the plugin declared them -- daily pulled and pushed, its day New York's to
    16:00; live and trades pulled and streamed, their delayed twins declaring
-   15 minutes; trades kept two days -- each with Massive's individual plans'
-   terms, one person's, as its default licence.
+   15 minutes; each describing Massive's terms and pricing in words
+   (contract 30), its source's first; how a gap in each is recovered.
 2. Licensed and entitled: the deployment admin licenses daily, live and
    trades, and entitles the reader to them.
 3. A close wanted: the reader reads SPY's close for 2026-10-08, which the lake
@@ -164,14 +164,17 @@ def run():
     must(all(int(entry[k].get("declared_delay_ns") or 0) == (DELAY_NS if k.endswith("_delayed") else 0)
              for k in KEYS),
          f"step 1, each delayed dataset declares 15 minutes: {[(k, e.get('declared_delay_ns')) for k, e in entry.items()]}")
-    must(entry["trades"]["licence_default"]["kept"] is True
-         and entry["trades"]["licence_default"]["retention_days"] == 2,
-         f"step 1, trades kept two days by default: {entry['trades']['licence_default']}")
+    must({k: e.get("gap_recovery") for k, e in entry.items()} == {
+             "daily": "backfill", "live": "stream_only", "live_delayed": "none",
+             "trades": "backfill", "trades_delayed": "backfill",
+             "options": "backfill", "options_delayed": "backfill"},
+         f"step 1, how a gap is recovered: {[(k, e.get('gap_recovery')) for k, e in entry.items()]}")
     must(entry["daily"]["day_time_zone"] == "America/New_York" and entry["daily"]["day_end_minute"] == 960,
          f"step 1, the declared day: {entry['daily']}")
-    must(entry["daily"]["licence_default"]["personal_use"] is True
-         and entry["live"]["licence_default"]["kept"] is False,
-         f"step 1, Massive's terms as the default licence: {entry['daily']['licence_default']}")
+    must(all("individual plans" in json.dumps(e.get("terms_and_pricing", "")) for e in entry.values())
+         and "OPRA" in json.dumps(entry["options"].get("terms_and_pricing", ""))
+         and "licence_default" not in entry["daily"],
+         f"step 1, Massive's terms in words: {entry['daily'].get('terms_and_pricing')}")
 
     # 2. Licensed and entitled.
     runner("licence", DAILY, "kept=true", "retention_days=0", "derived_use=true", "display=true",

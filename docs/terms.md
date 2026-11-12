@@ -15,10 +15,11 @@ relying on it.
   bar redistributing the data itself, and ask that the source's attribution
   and delay label travel with it.
 
-So the plugin declares each dataset's default terms as an individual plan's:
-one person's, shown to that person, derived data for their own use, not
-redistributed. Your deployment's Data sources page records the licence you
-enter and warns when more than one person can read a plugin entitled to a
+Each dataset describes these terms in words, its source's among them, on
+your deployment's Data sources page; the plugin declares no licence. On an
+individual plan, the licence you enter there is one person's, shown to that
+person, derived data for their own use, not redistributed; the page records
+it and warns when more than one person can read a plugin entitled to a
 one-person dataset. Open Meridian does not decide whether your use meets
 Massive's terms; the licence records what you entered.
 
