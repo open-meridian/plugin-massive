@@ -21,7 +21,9 @@ plan serves daily bars and option contracts' terms.
 
 **A Massive API key is needed**, from your Massive dashboard. It is a secret
 setting: sent to Massive alone, never logged or shown. Massive's terms are
-your deployment's to settle with Massive: see [docs/terms.md](docs/terms.md).
+your deployment's to settle with Massive: each dataset describes them in
+words on the Data sources page (contract 30), and
+[docs/terms.md](docs/terms.md) says the same.
 
 The documentation the plugin ships with -- overview, setup, pages,
 troubleshooting and terms -- is in [docs/](docs/README.md); `AGENTS.md` is

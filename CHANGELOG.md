@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.0
+
+On open-meridian 0.36.0, contract 30, on core aae501d's harness (chart
+0.1.538); `meridian` 0.1.60 in the check. What the plugin records is
+unchanged.
+
+- **Massive's terms and pricing in words** (ruling 1032): each dataset's
+  `licence_default` (an individual plan's, one person's) is gone, and
+  `terms_and_pricing` names its source (the US equity SIPs, or OPRA), its
+  delay where it has one, then Massive's plans -- individual plans for
+  personal, non-business use, business plans' internal use and display,
+  real time under the exchanges' agreements, prices per plan -- and that
+  the plugin is not affiliated. Shown on Data sources and in the Datasets
+  page's row details (was "kept; one person's"). The licence a deployment
+  admin sets is the one enforced; "trades kept two days" is the admin's to
+  set now.
+- **How a gap is recovered** (`gap_recovery`): `daily`, the trades and the
+  chains by `backfill` (Massive serves each again); `live` `stream_only`;
+  `live_delayed`, pulled for the latest alone, `none`. No
+  `sessions_calendar_id`: the platform's calendar master holds no US equity
+  or OPRA trading-sessions calendar yet.
+- **Row keys checked against the lake's rule 5** (ruled 2026-11-12): a
+  close and daily bar keyed by symbol and business date, a live price,
+  quote and trade by its own time or SIP sequence, each under its record
+  (`@INS-...`). **Two cases change valid time:** an option series' open
+  interest or volume is keyed by its series, its day and its kind (the
+  SDK's `helpers.statistic`) but valid from when the plugin read it, so a
+  volume read again later the same day restates the key under another valid
+  time; and a series' terms (`helpers.option_series`) are keyed by its OCC
+  symbol but valid from when read, so terms that change restate under
+  another valid time. Neither has a cancellation; listed for step 3d,
+  unchanged.
+- e2e: core lists each dataset's terms in words and how a gap is recovered
+  (was: the default licences).
+- `meridian plugin migrate --to 0.36.0` moved the pins (the base by digest,
+  `meridian` 0.1.60); its `licence-default-left` findings done by hand.
+- Core's runtime and harness images at `aae501d`, by digest.
+
 ## 0.2.0
 
 open-meridian 0.35.2 (each role one class; rulings 1003 to 1005 and 1009 to

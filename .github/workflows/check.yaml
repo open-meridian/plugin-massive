@@ -29,11 +29,11 @@ env:
   # The meridian whose rules the plugin is held to: the rules are compiled
   # into it. Move it deliberately, as the SDK's pin is moved, since a newer
   # one may hold a rule this plugin does not keep yet. `make check` reads it
-  # from here. 0.1.57 holds the suites of contract v29 and knows SDK 0.35's
+  # from here. 0.1.60 holds the suites of contract 30 and knows SDK 0.36's
   # shape (0.1.46 was the first to check docs/: documentation-sections,
   # documentation-safe). Locally `make check MERIDIAN_BIN=...` tries a build
   # of another.
-  MERIDIAN_VERSION: 0.1.57
+  MERIDIAN_VERSION: 0.1.60
 
 jobs:
   check:

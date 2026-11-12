@@ -38,7 +38,8 @@ Settings; a read of the other is declined, not covered.
   (`massive:trades_delayed`): each trade, streamed while something reads the
   listing, with what it may count for in a day's high, low, open, close and
   volume, from Massive's own rules for each trade condition, and the SIP's
-  sequence number. Kept two days by default. A range is read from Massive's
+  sequence number. How long the lake keeps them is the deployment's
+  licence. A range is read from Massive's
   trade history, and if the stream drops or the plugin restarts, the gap is
   caught up from it, a trade never recorded twice.
 

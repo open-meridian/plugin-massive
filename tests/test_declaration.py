@@ -80,19 +80,28 @@ def test_the_catalogue_one_dataset_per_timeliness() -> None:
     }
 
 
-def test_each_datasets_default_terms_are_an_individual_plans() -> None:
+def test_each_datasets_terms_and_pricing() -> None:
+    # Contract 30 (ruling 1032): Massive's terms in words, its source's first,
+    # never a licence; how a gap in each is recovered.
+    by_key = {d.key: d for d in CATALOGUE}
     for dataset in CATALOGUE:
-        licence = dataset.licence_default
-        assert licence is not None
-        assert licence.personal_use and licence.display
-        assert licence.derived_use_terms == "internal_only"
-        assert licence.redistribution == "not_allowed"
-        assert "not affiliated" in licence.not_affiliated_notice
-        # Not declared until core's declaration parser carries it.
-        assert licence.eligibility is None
-    kept = {d.key: (d.licence_default.kept, d.licence_default.retention_days) for d in CATALOGUE}  # type: ignore[union-attr]
-    assert kept["daily"] == (True, 0) and kept["live"] == (False, 0)
-    assert kept["trades"] == (True, 2) and kept["options"] == (True, 0)
+        assert "individual plans" in dataset.terms_and_pricing
+        assert "not affiliated" in dataset.terms_and_pricing
+        assert len(dataset.terms_and_pricing) <= 2000
+        assert not dataset.sessions_calendar_id
+        assert ("Delayed 15 minutes" in dataset.terms_and_pricing) == dataset.key.endswith(
+            "_delayed"
+        )
+    assert by_key["options"].terms_and_pricing.startswith("OPRA")
+    assert {k: d.gap_recovery for k, d in by_key.items()} == {
+        "daily": "backfill",
+        "live": "stream_only",
+        "live_delayed": "none",
+        "trades": "backfill",
+        "trades_delayed": "backfill",
+        "options": "backfill",
+        "options_delayed": "backfill",
+    }
 
 
 def test_the_settings_in_the_data_roles_order() -> None:
