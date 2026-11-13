@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.1
+
+On open-meridian 0.36.3, contract 30, on core aae501d's harness (chart
+0.1.538); `meridian` 0.1.60 in the check. The row-key rule (spec/the-lake rule
+5, ruled 2026-11-12), before core enforces it from contract 30's stage H.
+
+- **A statistic valid from the start of its day**: open interest and volume
+  are valid from the start of the market day they describe, in New York
+  (open-meridian 0.36.2's `helpers.chains.statistic`), never the time they
+  were read; the plugin no longer passes a valid time of its own, so a re-read
+  restates the value alone.
+- **A series' terms under their key's first valid time**: `record_series` and
+  each expiration's chain read build each series through the SDK's
+  `option_chains.SeriesTimes` (0.36.3), held in the plugin's storage
+  (`series.json`, beside its raw records) and never cleared when its plan
+  changes, so a restart sends no series under a new valid time. Terms changed
+  since are an adjustment, a new key valid from that day (`<OSI>:<date>:ADJ`).
+  A series the lake already holds under another first valid time is taken as
+  recorded, said once; one asked under another underlying than its first is
+  skipped and counted. A reader waiting on a series it already holds is
+  answered under the held time (before, unchanged terms were never sent
+  again).
+- **Tests**: a statistic read again, and every series after a restart a day
+  later, keep their valid time.
+- **open-meridian 0.36.3** (`meridian plugin migrate --to 0.36.2`, then `--to
+  0.36.3`): pins and the base by digest; its by-hand findings
+  (`valid-time-from-the-clock`, `series-without-a-holder`) done as above.
+
 ## 0.3.0
 
 On open-meridian 0.36.0, contract 30, on core aae501d's harness (chart

@@ -131,7 +131,11 @@ class Market(Lake):
 
     def __init__(self) -> None:
         granted = edge.storage_dir()
-        super().__init__(None, Products(granted / "products.json" if granted else None))
+        super().__init__(
+            None,
+            Products(granted / "products.json" if granted else None),
+            series_path=granted / "series.json" if granted else None,
+        )
         self.store = RawStore(storage_root("massive-raw-"), kind=KIND)
         # The sessions' latency (contract v27) and each live row's age at
         # the edge (contract v28), reported every ten seconds through this

@@ -48,6 +48,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from meridian.operations import SourceTime
@@ -112,11 +113,11 @@ class Lake(listings.Feed):
     history_from = HISTORY_FROM
     calendar_id = US_EQUITY_CALENDAR
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, series_path: Path | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         #: The option chains wanted, counted as one dataset.
         self.counts[OPTIONS] = listings.Counts()
-        self.chains = Chains(self)
+        self.chains = Chains(self, series_path)
         #: What each asset class's plan serves (settings.py).
         self.plans = {"stocks": DELAYED, "options": DELAYED}
         #: The plugin's `roles.Latency`, where it keeps one, and the edge's

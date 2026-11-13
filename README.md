@@ -25,6 +25,17 @@ your deployment's to settle with Massive: each dataset describes them in
 words on the Data sources page (contract 30), and
 [docs/terms.md](docs/terms.md) says the same.
 
+**A row key fixes its valid time** (spec/the-lake rule 5; open-meridian
+0.36.3): an option series' open interest and volume are valid from the start
+of the market day they describe, in New York, never when they were read, so
+a re-read restates the value alone. A series' terms keep their key's first
+valid time and first underlying, held across restarts in the plugin's
+storage (`series.json`, beside its raw records, through the SDK's
+`option_chains.SeriesTimes`); terms changed since are an adjustment, a
+new key valid from that day (`<OSI>:<date>:ADJ`); a series the lake already holds under
+another first valid time is taken as recorded, said once, and one asked
+under another underlying than its first is skipped and counted.
+
 The documentation the plugin ships with -- overview, setup, pages,
 troubleshooting and terms -- is in [docs/](docs/README.md); `AGENTS.md` is
 for whoever works on it next.

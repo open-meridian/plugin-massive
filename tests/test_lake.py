@@ -396,3 +396,39 @@ def test_the_stream_is_caught_up_after_a_reconnect(tmp_path: Path) -> None:
     assert asyncio.run(held.caught_up(since)) == 0
     keys = [t.meta.row_key for t in rows(recorder, "RecordTrades", "trades")]
     assert keys[0] == "SPY:t:2026-10-12:4101@LCL-SPY" and len(keys) == len(set(keys)) == 4
+
+
+def test_a_restart_keeps_every_series_valid_time(tmp_path: Path) -> None:
+    """The row-key rule (spec/the-lake rule 5): a series' terms recorded
+    again after a restart, a day later, keep their key's first valid time,
+    held in the plugin's storage (SDK 0.36.3, option_chains.SeriesTimes)."""
+    kept = tmp_path / "series.json"
+    asked = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries")
+
+    def started(now: int) -> tuple[Recorder, Any]:
+        recorder = Recorder()
+        answer_records(recorder, RECORDS)
+        answer_calendar(recorder)
+        return recorder, synthetic_lake(recorder, Clock(now), tmp_path, series_path=kept)
+
+    def times(recorder: Recorder) -> dict[str, int]:
+        return {
+            s.meta.row_key: s.meta.valid_from_ns for s in rows(recorder, "RecordSeries", "series")
+        }
+
+    recorder, held = started(MONDAY)
+    hear(recorder, held, asked)
+    first = times(recorder)
+    assert first and set(first.values()) == {MONDAY}
+    # Restarted the next day: a reader waiting is answered under each
+    # series' first valid time, and nothing is sent unasked.
+    again, restarted = started(MONDAY + 24 * 3600 * NS)
+    hear(again, restarted, asked)
+    assert times(again) == first
+    quiet, unasked = started(MONDAY + 48 * 3600 * NS)
+    hear(
+        quiet,
+        unasked,
+        want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries", want_id=""),
+    )
+    assert times(quiet) == {}

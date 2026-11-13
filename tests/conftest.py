@@ -112,6 +112,7 @@ def synthetic_lake(
     held: Mapping[str, Any] | None = None,
     stocks: str = REAL_TIME,
     options: str = REAL_TIME,
+    series_path: Path | None = None,
 ) -> Lake:
     store = RawStore(tmp / "raw", kind="responses")
     massive = no_wait(
@@ -125,7 +126,9 @@ def synthetic_lake(
         )
     )
     source = MassiveSource(massive, synthetic=True)
-    lake: Lake = recorder.bind(Lake(source, Products(tmp / "products.json"), clock))
+    lake: Lake = recorder.bind(
+        Lake(source, Products(tmp / "products.json"), clock, series_path=series_path)
+    )
     lake.use_plan(stocks, options)
     return lake
 
