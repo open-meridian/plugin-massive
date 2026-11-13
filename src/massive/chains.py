@@ -577,7 +577,6 @@ class Chains:
         """An expiration's series, quotes and statistics, each sent only where
         it changed: its quotes judged at the edge."""
         dataset = self.dataset()
-        now = self.now()
         dates = await self.dates()
         quotes_held = self.key() == OPTIONS
         series: list[Any] = []
@@ -611,7 +610,7 @@ class Chains:
                 if value is None or not day:
                     continue
                 stat = helpers.statistic(
-                    held.subject, key, kind, value, day, dataset=dataset, valid_from_ns=now, raw=raw
+                    held.subject, key, kind, value, day, dataset=dataset, raw=raw
                 )
                 assert stat.meta is not None
                 if self.sent.changed(STATISTIC, dataset, stat.meta.row_key, str(value)):

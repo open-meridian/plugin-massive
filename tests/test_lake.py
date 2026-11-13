@@ -176,6 +176,32 @@ def test_open_interest_is_dated_the_market_day_before(tmp_path: Path) -> None:
     assert interest == {"2026-10-08"} and volume == {"2026-10-12"}
 
 
+def _new_york_midnight(day: str) -> int:
+    start = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(), convert.NEW_YORK)
+    return int(start.timestamp()) * NS
+
+
+def test_a_statistic_read_again_keeps_its_valid_time(tmp_path: Path) -> None:
+    """A row key fixes its valid time (spec/the-lake rule 5; SDK 0.36.2): a
+    statistic is valid from the start of the day it describes, in New York,
+    never when it was read, so read again -- here by an instance restarted
+    three hours later -- it is restated under the same valid time."""
+    asked = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.Statistic")
+    recorder, held = lake(tmp_path)
+    hear(recorder, held, asked)
+    first = rows(recorder, "RecordStatistics", "statistics")
+    assert first and all(
+        s.meta.valid_from_ns == _new_york_midnight(s.meta.business_date) for s in first
+    )
+    again_recorder, again = lake(tmp_path)
+    again.clock_ns.now += 3 * 3600 * NS
+    hear(again_recorder, again, asked)
+    second = rows(again_recorder, "RecordStatistics", "statistics")
+    assert {s.meta.row_key: s.meta.valid_from_ns for s in second} == {
+        s.meta.row_key: s.meta.valid_from_ns for s in first
+    }
+
+
 def test_no_calendar_no_open_interest(tmp_path: Path) -> None:
     recorder, held = lake(tmp_path, calendar=False)
     recorder.answer("ReadCalendar", lambda p: ops.ReadCalendarResult(found=False))
