@@ -176,6 +176,32 @@ def test_open_interest_is_dated_the_market_day_before(tmp_path: Path) -> None:
     assert interest == {"2026-10-08"} and volume == {"2026-10-12"}
 
 
+def _new_york_midnight(day: str) -> int:
+    start = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(), convert.NEW_YORK)
+    return int(start.timestamp()) * NS
+
+
+def test_a_statistic_read_again_keeps_its_valid_time(tmp_path: Path) -> None:
+    """A row key fixes its valid time (spec/the-lake rule 5; SDK 0.36.2): a
+    statistic is valid from the start of the day it describes, in New York,
+    never when it was read, so read again -- here by an instance restarted
+    three hours later -- it is restated under the same valid time."""
+    asked = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.Statistic")
+    recorder, held = lake(tmp_path)
+    hear(recorder, held, asked)
+    first = rows(recorder, "RecordStatistics", "statistics")
+    assert first and all(
+        s.meta.valid_from_ns == _new_york_midnight(s.meta.business_date) for s in first
+    )
+    again_recorder, again = lake(tmp_path)
+    again.clock_ns.now += 3 * 3600 * NS
+    hear(again_recorder, again, asked)
+    second = rows(again_recorder, "RecordStatistics", "statistics")
+    assert {s.meta.row_key: s.meta.valid_from_ns for s in second} == {
+        s.meta.row_key: s.meta.valid_from_ns for s in first
+    }
+
+
 def test_no_calendar_no_open_interest(tmp_path: Path) -> None:
     recorder, held = lake(tmp_path, calendar=False)
     recorder.answer("ReadCalendar", lambda p: ops.ReadCalendarResult(found=False))
@@ -370,3 +396,39 @@ def test_the_stream_is_caught_up_after_a_reconnect(tmp_path: Path) -> None:
     assert asyncio.run(held.caught_up(since)) == 0
     keys = [t.meta.row_key for t in rows(recorder, "RecordTrades", "trades")]
     assert keys[0] == "SPY:t:2026-10-12:4101@LCL-SPY" and len(keys) == len(set(keys)) == 4
+
+
+def test_a_restart_keeps_every_series_valid_time(tmp_path: Path) -> None:
+    """The row-key rule (spec/the-lake rule 5): a series' terms recorded
+    again after a restart, a day later, keep their key's first valid time,
+    held in the plugin's storage (SDK 0.36.3, option_chains.SeriesTimes)."""
+    kept = tmp_path / "series.json"
+    asked = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries")
+
+    def started(now: int) -> tuple[Recorder, Any]:
+        recorder = Recorder()
+        answer_records(recorder, RECORDS)
+        answer_calendar(recorder)
+        return recorder, synthetic_lake(recorder, Clock(now), tmp_path, series_path=kept)
+
+    def times(recorder: Recorder) -> dict[str, int]:
+        return {
+            s.meta.row_key: s.meta.valid_from_ns for s in rows(recorder, "RecordSeries", "series")
+        }
+
+    recorder, held = started(MONDAY)
+    hear(recorder, held, asked)
+    first = times(recorder)
+    assert first and set(first.values()) == {MONDAY}
+    # Restarted the next day: a reader waiting is answered under each
+    # series' first valid time, and nothing is sent unasked.
+    again, restarted = started(MONDAY + 24 * 3600 * NS)
+    hear(again, restarted, asked)
+    assert times(again) == first
+    quiet, unasked = started(MONDAY + 48 * 3600 * NS)
+    hear(
+        quiet,
+        unasked,
+        want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries", want_id=""),
+    )
+    assert times(quiet) == {}

@@ -68,6 +68,7 @@ from collections import OrderedDict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from meridian.edge import as_reported
@@ -75,7 +76,7 @@ from meridian.errors import MeridianError
 from meridian.helpers import chains as helpers
 from meridian.operations import Eligibility, Money, Quote, SourceTime, Trade, TradeAttributes
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles.data import SentRows
+from meridian.roles.data import SentRows, option_chains
 from meridian.roles.data.listings import Counts
 
 from .convert import (
@@ -184,8 +185,11 @@ class Chains:
     """The chains wanted of `lake` (lake.Lake), read from its source and
     recorded, and the series whose trades are streamed."""
 
-    def __init__(self, lake: Any) -> None:
+    def __init__(self, lake: Any, series_path: Path | None = None) -> None:
         self.lake = lake
+        #: Each series' first valid time and subject (SDK 0.36.3), in the
+        #: plugin's storage; never cleared on a reset.
+        self.series_times = option_chains.SeriesTimes(series_path)
         self.underlyings: dict[str, Underlying] = {}
         #: When each chain read of the last minute was made.
         self.calls: deque[int] = deque()
@@ -470,7 +474,7 @@ class Chains:
             self.alive_ns = held.read_at[expiry]
             keeping = [w for w, days in held.standing.items() if expiry in days]
             want_id = waiting[0] if waiting else min(keeping, default="")
-            await self.record(held, listed, want_id)
+            await self.record(held, listed, want_id, waiting=bool(waiting))
         self._forget(held)
 
     # ── Dates ────────────────────────────────────────────────────────────
@@ -536,9 +540,15 @@ class Chains:
                 return {"open_interest": day.isoformat()}
         return {}
 
-    def series_row(self, held: Underlying, contract: Contract, dataset: str) -> Any | None:
+    def series_row(
+        self, held: Underlying, contract: Contract, dataset: str, waiting: bool
+    ) -> Any | None:
+        """A series' terms to send under its key's first valid time
+        (option_chains.SeriesTimes), or None: as held and no reader waiting,
+        another first subject, or not converted."""
         raw = self.lake.plugin.raw_record(contract.raw_key[:256])
-        try:
+
+        def build(valid_from_ns: int, adjusted_on: dt.date | None) -> Any:
             return helpers.option_series(
                 held.subject,
                 contract.osi,
@@ -550,34 +560,50 @@ class Chains:
                 settlement_method=contract.settlement_method,
                 contract_multiplier=contract.multiplier.normalize(),
                 deliverable=[(held.subject, STANDARD_SHARES)] if contract.standard else (),
-                valid_from_ns=self.now(),
+                valid_from_ns=valid_from_ns,
                 raw=raw,
+                adjusted_on=adjusted_on,
             )
+
+        now = self.now()
+        try:
+            return self.series_times.series(
+                build, dataset=dataset, osi=contract.osi, subject=held.subject, now_ns=now,
+                today=new_york_date(now), waiting=waiting,
+            )  # fmt: skip
         except ValueError:
             self.counts.unconverted += 1
             return None
 
+    async def send_series(self, rows: list[Any], want_id: str) -> None:
+        """Series sent through the holder, which keeps what the lake has."""
+
+        async def send_batch(batch: list[Any]) -> None:
+            await self.send("series", batch, want_id)
+
+        today = new_york_date(self.now())
+        self.counts.unchanged += await self.series_times.record(send_batch, rows, today)
+
     async def record_series(
         self, held: Underlying, chosen: Sequence[Contract], want_id: str
     ) -> None:
-        """The terms of the contracts chosen, each sent only where changed."""
+        """The terms of the contracts chosen, each sent where changed, or to
+        a reader waiting."""
         dataset = self.dataset()
-        rows: list[Any] = []
-        for contract in chosen:
-            row = self.series_row(held, contract, dataset)
-            if row is None:
-                continue
-            terms = repr([(f.path, f.value) for f in row.fields])
-            if self.sent.changed(SERIES, dataset, contract.osi, terms):
-                rows.append(row)
+        rows = [
+            row
+            for contract in chosen
+            if (row := self.series_row(held, contract, dataset, bool(want_id))) is not None
+        ]
         if rows:
-            await self.send("series", rows, want_id)
+            await self.send_series(rows, want_id)
 
-    async def record(self, held: Underlying, listed: Sequence[ChainOption], want_id: str) -> None:
+    async def record(
+        self, held: Underlying, listed: Sequence[ChainOption], want_id: str, waiting: bool = False
+    ) -> None:
         """An expiration's series, quotes and statistics, each sent only where
         it changed: its quotes judged at the edge."""
         dataset = self.dataset()
-        now = self.now()
         dates = await self.dates()
         quotes_held = self.key() == OPTIONS
         series: list[Any] = []
@@ -589,11 +615,9 @@ class Chains:
             raw = self.lake.plugin.raw_record(option.raw_key[:256])
             key = helpers.osi_key(option.osi)
             if contract is not None:
-                row = self.series_row(held, contract, dataset)
+                row = self.series_row(held, contract, dataset, waiting)
                 if row is not None:
-                    terms = repr([(f.path, f.value) for f in row.fields])
-                    if self.sent.changed(SERIES, dataset, option.osi, terms):
-                        series.append(row)
+                    series.append(row)
             quote = self.quote(held.subject, option, key, dataset, raw) if quotes_held else None
             if quote is not None:
                 said = repr((quote.bid, quote.ask, quote.bid_quantity, quote.ask_quantity))
@@ -611,13 +635,13 @@ class Chains:
                 if value is None or not day:
                     continue
                 stat = helpers.statistic(
-                    held.subject, key, kind, value, day, dataset=dataset, valid_from_ns=now, raw=raw
+                    held.subject, key, kind, value, day, dataset=dataset, raw=raw
                 )
                 assert stat.meta is not None
                 if self.sent.changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
                     statistics.append(stat)
         if series:
-            await self.send("series", series, want_id)
+            await self.send_series(series, want_id)
         if quotes:
             await self.send("quotes", self.lake.at_the_edge(self.key(), quotes, want_id), want_id)
         if statistics:
