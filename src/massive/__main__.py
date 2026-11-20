@@ -35,6 +35,7 @@ import meridian
 from meridian import edge
 from meridian.edge import RawStore, storage_root
 from meridian.roles import Latency
+from meridian.roles.data import option_chains
 
 from .declaration import DECLARATION, PORT
 from .declared import KIND
@@ -130,12 +131,9 @@ class Market(Lake):
     `meridian.run` after a backoff should it stop."""
 
     def __init__(self) -> None:
-        granted = edge.storage_dir()
-        super().__init__(
-            None,
-            Products(granted / "products.json" if granted else None),
-            series_path=granted / "series.json" if granted else None,
-        )
+        # What it keeps in its storage is read once registered (open_storage).
+        super().__init__(None, Products(None))
+        self.opened = False
         self.store = RawStore(storage_root("massive-raw-"), kind=KIND)
         # The sessions' latency (contract v27) and each live row's age at
         # the edge (contract v28), reported every ten seconds through this
@@ -149,6 +147,7 @@ class Market(Lake):
         the client made again, the plans set, the streams restarted, and the
         raw answers past their window moved. The key's value is never
         logged: only whether it is set."""
+        self.open_storage()
         state = self.state
         state.config = config_from(delivered.values, delivered.missing)
         config = state.config
@@ -199,8 +198,28 @@ class Market(Lake):
         """The plugin's health, with the data role's figures as they stand."""
         await self.plugin.report(healthy=healthy, detail=detail[:200], figures=figures(self.state))
 
+    def open_storage(self) -> None:
+        """The listing map and each option series' first valid time, read
+        from its storage once registered -- on an instance run as shards or
+        with a standby pod, the shard's own folder (open-meridian 0.37.0) --
+        at the first settings, which `meridian.run` delivers before
+        `on_start`, and read afresh when registered again."""
+        if self.opened:
+            return
+        self.opened = True
+        granted = edge.storage_dir()
+        self.products = Products(granted / "products.json" if granted else None)
+        self.chains.series_times = option_chains.SeriesTimes(
+            granted / "series.json" if granted else None
+        )
+
     async def on_start(self) -> None:
+        self.open_storage()
         self.latency.role = self
+
+    async def on_stop(self) -> None:
+        self.opened = False
+        await super().on_stop()
 
     async def run(self) -> None:
         state = self.state
