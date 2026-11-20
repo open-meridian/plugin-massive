@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2
+
+SDK 0.37.0: waits for a lost sidecar; the listing map and each option
+series' first valid time are read from storage once registered, on an
+instance run as shards or with a standby pod the shard's own folder.
+
 ## 0.3.1
 
 On open-meridian 0.36.3, contract 30, on core aae501d's harness (chart

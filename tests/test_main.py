@@ -7,9 +7,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from meridian import edge
 from meridian.edge import RawStore
 
-from massive.__main__ import feed_for, source_for
+from massive.__main__ import Market, feed_for, source_for
 from massive.page import State
 from massive.preview import PAGES, main
 from massive.settings import config_from
@@ -61,3 +62,25 @@ def test_each_preview_page_renders(page: str, capsys: pytest.CaptureFixture[str]
     assert main(["preview", page]) == 0
     shown = capsys.readouterr().out
     assert "<h1>Massive</h1>" in shown and KEY not in shown
+
+
+async def test_storage_read_once_registered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On an instance run as shards, the listing map and each series' first
+    valid time are read from storage once the plugin has registered: its
+    shard's own folder, read afresh when it registers again (open-meridian
+    0.37.0). Built before Register, as `main()` builds it, nothing is read:
+    read then, it raises."""
+    monkeypatch.setenv("MERIDIAN_STORAGE_DIR", str(tmp_path))
+    monkeypatch.setenv("MERIDIAN_PLUGIN_SHARDS", "2")
+    monkeypatch.setattr(edge, "_serving", None)
+    market = Market()
+    monkeypatch.setattr(edge, "_serving", (1, 2))
+    await market.on_start()
+    assert market.products.path == tmp_path / "shard-1" / "products.json"
+    assert market.chains.series_times.path == tmp_path / "shard-1" / "series.json"
+    await market.on_stop()
+    monkeypatch.setattr(edge, "_serving", (0, 2))
+    await market.on_start()
+    assert market.products.path == tmp_path / "shard-0" / "products.json"
