@@ -6,6 +6,8 @@ SDK 0.37.0: waits for a lost sidecar; the listing map and each option
 series' first valid time are read from storage once registered, on an
 instance run as shards or with a standby pod the shard's own folder.
 
+SDK 0.37.1: a raw record kept from two threads at once waits instead of being dropped.
+
 ## 0.3.1
 
 On open-meridian 0.36.3, contract 30, on core aae501d's harness (chart
